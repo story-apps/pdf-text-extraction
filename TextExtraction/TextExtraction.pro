@@ -5,20 +5,20 @@ CONFIG += staticlib
 
 QT -= core gui
 
-LIBSDIR = ../../_build/libs
+LIBSDIR = ../../../_build/libs
 
 #
 # Конфигурируем расположение файлов сборки
 #
-DESTDIR = ../../_build/libs
+DESTDIR = ../../../_build/libs
 #
 
 #
 # Подключаем библиотеку PDFWriter
 #
 LIBS += -L$$LIBSDIR/ -lPDFWriter
-INCLUDEPATH += $$PWD/../PDFHummus/PDFWriter
-DEPENDPATH += $$PWD/../PDFHummus/PDFWriter
+INCLUDEPATH += $$PWD/../../pdfhummus/PDFWriter
+DEPENDPATH += $$PWD/../../pdfhummus/PDFWriter
 #
 
 INCLUDEPATH += $$PWD
