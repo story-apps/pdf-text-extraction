@@ -27,9 +27,20 @@ bool TextExtraction::OnParsedTextPlacementComplete(const ParsedTextPlacement& in
     return true;
 }
 
+bool TextExtraction::OnParsedTextPlacementCompleteWithFormat(const ParsedTextPlacement& inParsedTextPlacement, TextFormat format) {
+    // filter out elements outside of the page box
+    if(DoBoxesIntersect(currentPageScopeBox, inParsedTextPlacement.globalBbox))
+        textsForPagesWithFormats.back().push_back(std::pair<ParsedTextPlacement, TextFormat>(inParsedTextPlacement, format));
+    return true;
+}
+
 
 bool TextExtraction::OnTextElementComplete(const TextElement& inTextElement) {
     return textInterpeter.OnTextElementComplete(inTextElement);
+}
+
+bool TextExtraction::OnTextElementCompleteWithFormats(const TextElement& inTextElement, TextFormat inFormat) {
+    return textInterpeter.OnTextElementCompleteWithFormats(inTextElement, inFormat);
 }
 
 bool TextExtraction::OnPathPainted(const PathElement& inPathElement) {
@@ -78,6 +89,42 @@ EStatusCode TextExtraction::ExtractTextPlacements(PDFParser* inParser, long inSt
     return status;
 }
 
+EStatusCode TextExtraction::ExtractTextPlacementsWithFormats(PDFParser* inParser, long inStartPage, long inEndPage) {
+    EStatusCode status = eSuccess;
+    unsigned long start = (unsigned long)(inStartPage >= 0 ? inStartPage : (inParser->GetPagesCount() + inStartPage));
+    unsigned long end = (unsigned long)(inEndPage >= 0 ? inEndPage :  (inParser->GetPagesCount() + inEndPage));
+    GraphicContentInterpreter interpreter;
+
+
+    if(end > inParser->GetPagesCount()-1)
+        end = inParser->GetPagesCount()-1;
+    if(start > end)
+        start = end;
+
+    for(unsigned long i=start;i<=end && status == eSuccess;++i) {
+        RefCountPtr<PDFDictionary> pageObject(inParser->ParsePage(i));
+        if(!pageObject) {
+            status = eFailure;
+            break;
+        }
+
+        PDFPageInput pageInput(inParser,pageObject);
+        PDFRectangle mediaBox = pageInput.GetMediaBox();
+        currentPageScopeBox[0] = mediaBox.LowerLeftX;
+        currentPageScopeBox[1] = mediaBox.LowerLeftY;
+        currentPageScopeBox[2] = mediaBox.UpperRightX;
+        currentPageScopeBox[3] = mediaBox.UpperRightY;
+
+        textsForPagesWithFormats.push_back(ParsedTextPlacementWithFormatList());
+        // the interpreter will trigger the textInterpreter which in turn will trigger this object to collect text elements
+        interpreter.InterpretPageContentsWithFormats(inParser, pageObject.GetPtr(), this);
+    }
+
+    textInterpeter.ResetInterpretationState();
+
+    return status;
+}
+
 static const string scEmpty = "";
 
 EStatusCode TextExtraction::ExtractText(const std::string& inFilePath, long inStartPage, long inEndPage) {
@@ -117,6 +164,43 @@ EStatusCode TextExtraction::ExtractText(const std::string& inFilePath, long inSt
     return status;
 }
 
+EStatusCode TextExtraction::ExtractTextWithFormats(const std::string& inFilePath, long inStartPage, long inEndPage) {
+    EStatusCode status = eSuccess;
+    InputFile sourceFile;
+
+    LatestWarnings.clear();
+    LatestError.code = eErrorNone;
+    LatestError.description = scEmpty;
+
+    textsForPages.clear();
+
+    do {
+        status = sourceFile.OpenFile(inFilePath);
+        if (status != eSuccess) {
+            LatestError.code = eErrorFileNotReadable;
+            LatestError.description = string("Cannot read file ") + inFilePath;
+            break;
+        }
+
+
+        PDFParser parser;
+        status = parser.StartPDFParsing(sourceFile.GetInputStream());
+        if(status != eSuccess)
+        {
+            LatestError.code = eErrorInternalPDFWriter;
+            LatestError.description = string("Failed to parse file");
+            break;
+        }
+
+        status = ExtractTextPlacementsWithFormats(&parser, inStartPage, inEndPage);
+        if(status != eSuccess)
+            break;
+
+    } while(false);
+
+    return status;
+}
+
 static const string scCRLN = "\r\n";
 
 std::string TextExtraction::GetResultsAsText(int bidiFlag, TextComposer::ESpacing spacingFlag) {
@@ -131,6 +215,17 @@ std::string TextExtraction::GetResultsAsText(int bidiFlag, TextComposer::ESpacin
     return composer.GetText();
 }
 
+std::string TextExtraction::GetResultsAsTextWithFormats(int bidiFlag, TextComposer::ESpacing spacingFlag) {
+    ParsedTextPlacementWithFormatListList::iterator itPages = textsForPagesWithFormats.begin();
+    TextComposer composer(bidiFlag, spacingFlag);
+
+    for(; itPages != textsForPagesWithFormats.end();++itPages) {
+        composer.ComposeTextWithFormats(*itPages);
+        composer.AppendText(scCRLN);
+    }
+
+    return composer.GetText();
+}
 
 EStatusCode TextExtraction::DecryptPDFForDebugging(
     const string& inTemplateFilePath,

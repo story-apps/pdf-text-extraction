@@ -47,9 +47,18 @@ bool TableExtraction::OnParsedTextPlacementComplete(const ParsedTextPlacement& i
     return true;
 }
 
+bool TableExtraction::OnParsedTextPlacementCompleteWithFormat(const ParsedTextPlacement& inParsedTextPlacement, TextFormat format) {
+    textsForPagesWithFormats.back().push_back(std::pair<ParsedTextPlacement, TextFormat>(inParsedTextPlacement, format));
+    return true;
+}
+
 
 bool TableExtraction::OnTextElementComplete(const TextElement& inTextElement) {
     return textInterpeter.OnTextElementComplete(inTextElement);
+}
+
+bool TableExtraction::OnTextElementCompleteWithFormats(const TextElement& inTextElement, TextFormat inFormat) {
+    return textInterpeter.OnTextElementCompleteWithFormats(inTextElement, inFormat);
 }
 
 bool TableExtraction::OnPathPainted(const PathElement& inPathElement) {

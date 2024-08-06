@@ -30,5 +30,7 @@ struct ParsedTextPlacement {
     double globalSpaceWidth[2];
 };
 
-
 typedef std::list<ParsedTextPlacement> ParsedTextPlacementList;
+
+enum TextFormat { regular, italic, bold, italicBold };
+typedef std::list<std::pair<ParsedTextPlacement, TextFormat>> ParsedTextPlacementWithFormatList;

@@ -10,6 +10,8 @@
 #include "Path.h"
 #include "PathElement.h"
 
+#include "../text-parsing/ParsedTextPlacement.h"
+
 #include <list>
 #include <map>
 
@@ -25,6 +27,10 @@ public:
 
     // interpret 
     bool InterpretPageContents(
+        PDFParser* inParser,
+        PDFDictionary* inPage,
+        IGraphicContentInterpreterHandler* inHandler);
+    bool InterpretPageContentsWithFormats(
         PDFParser* inParser,
         PDFDictionary* inPage,
         IGraphicContentInterpreterHandler* inHandler);
@@ -75,6 +81,7 @@ private:
     bool TfCommand(const PDFObjectVector& inOperands);
     bool BTCommand();
     bool ETCommand();
+    bool ETCommandWithFormat(TextFormat inFormat);
     bool TdCommand(const PDFObjectVector& inOperands);
     bool TDCommand(const PDFObjectVector& inOperands);
     bool TmCommand(const PDFObjectVector& inOperands);
@@ -124,6 +131,7 @@ private:
 
     void StartTextElement();
     bool EndTextElement();
+    bool EndTextElementWithFormat(TextFormat inFormat);
 
     void RecordTextPlacement(const PlacedTextCommandArgument& inTextPlacementOperation);
     void RecordTextPlacement(const PlacedTextCommandArgumentList& inTextPlacementOperations);

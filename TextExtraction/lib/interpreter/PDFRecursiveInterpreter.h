@@ -22,6 +22,11 @@ public:
         PDFDictionary* inPage,
         IPDFRecursiveInterpreterHandler* inHandler);
 
+    bool InterpretPageContentsWithFormats(
+        PDFParser* inParser,
+        PDFDictionary* inPage,
+        IPDFRecursiveInterpreterHandler* inHandler);
+
     bool InterpretXObjectContents(
         PDFParser* inParser,
         PDFStreamInput* inXObject,
@@ -54,6 +59,14 @@ private:
         InterpreterContext* inContext,
         IPDFRecursiveInterpreterHandler* inHandler
     );
+    bool InterpretContentStreamWithFormats(
+        PDFParser* inParser,
+        PDFDictionary* inContentParent,
+        PDFObjectParser* inObjectParser,
+        InterpreterContext* inContext,
+        IPDFRecursiveInterpreterHandler* inHandler
+    );
+
     void SkipInlinImageTillEI(
         PDFObjectParser* inObjectParser
     );

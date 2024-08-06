@@ -6,6 +6,8 @@
 #include <string>
 #include <list>
 
+#include "../text-parsing/ParsedTextPlacement.h"
+
 
 class PDFObject;
 class PDFStreamInput;
@@ -31,6 +33,9 @@ class IInterpreterContext {
     // this is good for cases where you want to read operators/operands in advance or even read ahead in the stream.
     // note that parser will become available only once intepretation starts!
     virtual PDFObjectParser* GetObjectParser() =0;
+
+    bool includeFormats = false;
+    TextFormat currentFormat = TextFormat::regular;
 };
 
 

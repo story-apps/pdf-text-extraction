@@ -22,6 +22,7 @@ class TextComposer {
 
 
         void ComposeText(const ParsedTextPlacementList& inTextPlacements);
+        void ComposeTextWithFormats(const ParsedTextPlacementWithFormatList& inTextPlacements);
 
         void AppendText(const std::string inText); // use this for extra chars
 

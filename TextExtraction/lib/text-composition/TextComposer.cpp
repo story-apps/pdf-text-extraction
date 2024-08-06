@@ -112,7 +112,19 @@ bool CompareParsedTextPlacement(const ParsedTextPlacement& a, const ParsedTextPl
     return codeA < codeB;
 }
 
+bool CompareParsedTextPlacementWithFormats(const std::pair<ParsedTextPlacement, TextFormat>& a, const std::pair<ParsedTextPlacement, TextFormat>& b) {
+    int codeA = GetOrientationCode(a.first);
+    int codeB = GetOrientationCode(b.first);
+
+    if(codeA == codeB) {
+        return CompareForOrientation(a.first, b.first, codeA);
+    }
+
+    return codeA < codeB;
+}
+
 typedef std::vector<ParsedTextPlacement> ParsedTextPlacementVector;
+typedef std::vector<std::pair<ParsedTextPlacement, TextFormat>> ParsedTextPlacementVectorWithFormats;
 
 bool AreSameLine(const ParsedTextPlacement& a, const ParsedTextPlacement& b) {
     int codeA = GetOrientationCode(a);
@@ -218,6 +230,51 @@ void TextComposer::ComposeText(const ParsedTextPlacementList& inTextPlacements) 
             hasPreviousLineInPage = true;
         }
         lineResult<<itCommands->text;
+        latestItem = *itCommands;
+    }
+    MergeLineStreamToResultString(lineResult, bidiFlag ,addVerticalSpaces && hasPreviousLineInPage, lineBox, prevLineBox);
+
+}
+
+void TextComposer::ComposeTextWithFormats(const ParsedTextPlacementWithFormatList& inTextPlacements) {
+    double lineBox[4];
+    double prevLineBox[4];
+    bool isFirstLine;
+    bool addVerticalSpaces = spacingFlag & TextComposer::eSpacingVertical;
+    bool addHorizontalSpaces = spacingFlag & TextComposer::eSpacingHorizontal;
+
+    ParsedTextPlacementVectorWithFormats sortedTextCommands(inTextPlacements.begin(), inTextPlacements.end());
+    sort(sortedTextCommands.begin(), sortedTextCommands.end(), CompareParsedTextPlacementWithFormats);
+
+    ParsedTextPlacementVectorWithFormats::iterator itCommands = sortedTextCommands.begin();
+    if(itCommands == sortedTextCommands.end())
+        return;
+
+    // k. got some text, let's build it
+    stringstream lineResult;
+    std::pair<ParsedTextPlacement, TextFormat>& latestItem = *itCommands;
+    bool hasPreviousLineInPage = false;
+    CopyBox(itCommands->first.globalBbox, lineBox);
+    lineResult<<latestItem.first.text << " " << itCommands->second;
+    ++itCommands;
+    for(; itCommands != sortedTextCommands.end();++itCommands) {
+        if(AreSameLine(latestItem.first, itCommands->first)) {
+            if(addHorizontalSpaces) {
+                unsigned long spaces = GuessHorizontalSpacingBetweenPlacements(latestItem.first, itCommands->first);
+                if(spaces != 0)
+                    lineResult<<string(spaces, scSpace);
+            }
+            UnionLeftBoxToRight(itCommands->first.globalBbox, lineBox);
+        } else {
+            // merge complete line to accumulated text, and start a fresh line with fresh accumulators
+            MergeLineStreamToResultString(lineResult, bidiFlag ,addVerticalSpaces && hasPreviousLineInPage, lineBox, prevLineBox);
+            buffer<<scCRLN;
+            lineResult.str(scEmpty);
+            CopyBox(lineBox, prevLineBox);
+            CopyBox(itCommands->first.globalBbox, lineBox);
+            hasPreviousLineInPage = true;
+        }
+        lineResult<<itCommands->first.text << " " << itCommands->second;
         latestItem = *itCommands;
     }
     MergeLineStreamToResultString(lineResult, bidiFlag ,addVerticalSpaces && hasPreviousLineInPage, lineBox, prevLineBox);

@@ -287,6 +287,134 @@ bool PDFRecursiveInterpreter::InterpretContentStream(
     return shouldContinue;
 }
 
+bool PDFRecursiveInterpreter::InterpretContentStreamWithFormats(
+    PDFParser* inParser,
+    PDFDictionary* inContentParent,
+    PDFObjectParser* inObjectParser,
+    InterpreterContext* inContext,
+    IPDFRecursiveInterpreterHandler* inHandler
+) {
+    if(inObjectParser == NULL) // hmmm. something didn't work with creating an object parser. possibly an uknown
+                               // filter?
+        return true;
+
+    inContext->SetObjectParser(inObjectParser);
+
+    PDFObjectVector operandsStack;
+    bool shouldContinue = true;
+
+    PDFObject* anObject = inObjectParser->ParseNewObject();
+
+    while(!!anObject && shouldContinue) {
+        if(anObject->GetType() == PDFObject::ePDFObjectSymbol) {
+            PDFSymbol* anOperand = (PDFSymbol*)anObject;
+            if (anOperand->GetValue() == "Tf") {
+                inContext->currentFormat = TextFormat::regular;
+                if (operandsStack.size() > 1) {
+                    const PDFName *currentFont = (PDFName*)operandsStack.at(operandsStack.size() - 2);
+                    const auto baseFont = inParser->GetBaseFontName(currentFont);
+                    if (baseFont.find("Bold") != std::string::npos || baseFont.find("bold") != std::string::npos) {
+                        inContext->currentFormat = TextFormat::bold;
+                    }
+                    if (baseFont.find("Italic") != std::string::npos || baseFont.find("italic") != std::string::npos) {
+                        if (inContext->currentFormat == TextFormat::bold) {
+                            inContext->currentFormat = TextFormat::italicBold;
+                        } else {
+                            inContext->currentFormat = TextFormat::italic;
+                        }
+                    }
+                }
+            }
+
+            // Call handler for operation event
+            shouldContinue = inHandler->OnOperation(anOperand->GetValue(), operandsStack, inContext);
+
+            if (anOperand->GetValue() == "ET") {
+                inContext->currentFormat = TextFormat::regular;
+            }
+
+            bool shouldRecurseIntoForm = false;
+            bool shouldSkipInlineImage = false;
+            string formName;
+
+            // Some control decisions for the interpreter on special kinds of operations
+            if(anOperand->GetValue() == scDo) {
+                // should recurse into form. save name for now
+                if(operandsStack.size() == 1 && operandsStack[0]->GetType() == PDFObject::ePDFObjectName) {
+                    formName = ((PDFName*)operandsStack[0])->GetValue();
+                    shouldRecurseIntoForm = true;
+                }
+            }
+
+            if(anOperand->GetValue() == scID && inHandler->ShouldSkipInlineImage()) {
+                // mark for skipping the content of this image
+                shouldSkipInlineImage = true;
+            }
+
+            // release operations and operands
+            anOperand->Release();
+            FreeObjectVector(operandsStack);
+
+            if(!shouldContinue)
+                break;
+
+            // now for implementing the special operations
+
+            if(shouldRecurseIntoForm) {
+                // k. user didn't cancel, let's dive into form
+                LongFilePositionType currentPosition = inParser->GetParserStream()->GetCurrentPosition();
+                PDFObjectCastPtr<PDFIndirectObjectReference> xobjectRef = inContext->FindResource(formName, "XObject");
+                ObjectIDType formObjectID = !xobjectRef ? 0 : xobjectRef->mObjectID;
+                if(!!mNestingContext) {
+                    ObjectIDTypeList::iterator itFindInStack = find(mNestingContext->nestedXObjects.begin(), mNestingContext->nestedXObjects.end(), formObjectID);
+                    if(itFindInStack != mNestingContext->nestedXObjects.end()) {
+                        // orcish mischief! looping. halt
+                        shouldContinue = false;
+                        break;
+                    }
+
+                    // add this form to the nesting stack
+                    mNestingContext->nestedXObjects.push_back(formObjectID);
+                }
+
+                PDFObjectCastPtr<PDFStreamInput> formObject(inParser->ParseNewObject(formObjectID));
+                if(!!formObject && IsForm(formObject.GetPtr())) {
+                    bool shouldRecurse = inHandler->OnXObjectDoStart(formName, formObjectID, formObject.GetPtr(), inParser);
+                    if(shouldRecurse) {
+                        PDFRecursiveInterpreter subordinateInterpreter;
+                        shouldContinue = subordinateInterpreter.InterpretXObjectContents(
+                            inParser,
+                            formObject.GetPtr(),
+                            inHandler
+                        );
+                    }
+                    inHandler->OnXObjectDoEnd(formName, formObjectID, formObject.GetPtr(), inParser);
+                }
+
+                if(!!mNestingContext) {
+                    mNestingContext->nestedXObjects.pop_back();
+                }
+
+
+                // restore stream position (hopefully this is enough to continue from where we were...)
+                inParser->GetParserStream()->SetPosition(currentPosition);
+            } else if(shouldSkipInlineImage) {
+                SkipInlinImageTillEI(inObjectParser);
+                // for completion, have onOperation for EI
+                shouldContinue = inHandler->OnOperation(scEI, PDFObjectVector(), inContext);
+            }
+        }
+        else {
+            operandsStack.push_back(anObject);
+        }
+        anObject = inObjectParser->ParseNewObject();
+    }
+
+    FreeObjectVector(operandsStack);
+    delete inObjectParser; // The passed object parser is owned by this method, so dispose when done
+
+    return shouldContinue;
+}
 
 bool PDFRecursiveInterpreter::InterpretPageContents(
     PDFParser* inParser,
@@ -306,6 +434,30 @@ bool PDFRecursiveInterpreter::InterpretPageContents(
     }
     else if(contents->GetType() == PDFObject::ePDFObjectStream) {
         return InterpretContentStream(inParser, inPage, inParser->StartReadingObjectsFromStream((PDFStreamInput*)contents.GetPtr()),&context , inHandler);
+    }
+
+    return true;
+}
+
+bool PDFRecursiveInterpreter::InterpretPageContentsWithFormats(
+    PDFParser* inParser,
+    PDFDictionary* inPage,
+    IPDFRecursiveInterpreterHandler* inHandler) {
+
+
+    RefCountPtr<PDFObject> contents(inParser->QueryDictionaryObject(inPage, scContents));
+    if(!contents)
+        return true;
+
+    InterpreterContext context(inParser, inPage);
+    inHandler->OnResourcesRead(&context);
+    context.includeFormats = true;
+
+    if(contents->GetType() == PDFObject::ePDFObjectArray) {
+        return InterpretContentStreamWithFormats(inParser, inPage, inParser->StartReadingObjectsFromStreams((PDFArray*)contents.GetPtr()),&context, inHandler);
+    }
+    else if(contents->GetType() == PDFObject::ePDFObjectStream) {
+        return InterpretContentStreamWithFormats(inParser, inPage, inParser->StartReadingObjectsFromStream((PDFStreamInput*)contents.GetPtr()),&context , inHandler);
     }
 
     return true;

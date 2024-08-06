@@ -4,6 +4,8 @@
 #include "Resources.h"
 #include "PathElement.h"
 
+#include "../text-parsing/ParsedTextPlacement.h"
+
 class IInterpreterContext;
 
 class IGraphicContentInterpreterHandler 
@@ -12,6 +14,7 @@ public:
 
     // called for each text element on finish with the collected text element
     virtual bool OnTextElementComplete(const TextElement& inTextElement) = 0;
+    virtual bool OnTextElementCompleteWithFormats(const TextElement& inTextElement, TextFormat format) = 0;
 
     // called for each path on finish with the collected path and respective drawing verb
     virtual bool OnPathPainted(const PathElement& inPathElement) = 0;
