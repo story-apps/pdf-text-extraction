@@ -12,7 +12,6 @@
 #include "PDFParser.h"
 #include "PDFStreamInput.h"
 
-
 #include "../math/Transformations.h"
 #include "../interpreter/PDFRecursiveInterpreter.h"
 #include "../pdf-writer-enhancers/Bytes.h"
@@ -41,6 +40,23 @@ bool GraphicContentInterpreter::InterpretPageContents(
     handler = inHandler;
     InitInterpretationState();
     bool result = interpreter.InterpretPageContents(inParser, inPage, this); 
+    ResetInterpretationState();
+    return result;
+}
+
+bool GraphicContentInterpreter::InterpretPageContentsWithFormats(
+    PDFParser* inParser,
+    PDFDictionary* inPage,
+    IGraphicContentInterpreterHandler* inHandler) {
+
+    if(!inHandler) // yeah im gonna require a handler here.
+        return true;
+
+    PDFRecursiveInterpreter interpreter;
+
+    handler = inHandler;
+    InitInterpretationState();
+    bool result = interpreter.InterpretPageContentsWithFormats(inParser, inPage, this);
     ResetInterpretationState();
     return result;
 }
@@ -94,7 +110,11 @@ bool GraphicContentInterpreter::OnOperation(const std::string& inOperation,  con
     } else if(inOperation == "BT") {
         return BTCommand();
     } else if(inOperation == "ET") {
-        return ETCommand();
+        if (inContext->includeFormats) {
+            return ETCommandWithFormat(inContext->currentFormat);
+        } else {
+            return ETCommand();
+        }
     } else if(inOperation == "Td") {
         // text positioining operators
         return TdCommand(inOperands);
@@ -352,8 +372,41 @@ bool GraphicContentInterpreter::EndTextElement() {
     return handler->OnTextElementComplete(el);
 }
 
+bool GraphicContentInterpreter::EndTextElementWithFormat(TextFormat inFormat) {
+    if(!isInTextElement) // ET without BT. ignore.
+        return true;
+
+    isInTextElement = false;
+
+    // copy text graphic state from text element graphic state to main graphic state
+    // for those operators that data is supposed to retain past text element boundaries
+    TextGraphicState& source = textGraphicStateStack.back();
+    TextGraphicState& target = graphicStateStack.back().textGraphicState;
+    target.charSpace = source.charSpace;
+    target.wordSpace = source.wordSpace;
+    target.scale = source.scale;
+    target.leading = source.leading;
+    target.rise = source.rise;
+    target.fontRef = source.fontRef;
+    target.fontSize = source.fontSize;
+
+    // prep result
+    TextElement el = {PlacedTextCommandList(currentTextElementCommands)};
+
+    // clear text element state
+    currentTextElementCommands.clear();
+    textGraphicStateStack.clear();
+
+    // forward the new text element to the client
+    return handler->OnTextElementCompleteWithFormats(el, inFormat);
+}
+
 bool GraphicContentInterpreter::ETCommand() {
     return EndTextElement();
+}
+
+bool GraphicContentInterpreter::ETCommandWithFormat(TextFormat inFormat) {
+    return EndTextElementWithFormat(inFormat);
 }
 
 void GraphicContentInterpreter::setTm(const double (&matrix)[6]) {

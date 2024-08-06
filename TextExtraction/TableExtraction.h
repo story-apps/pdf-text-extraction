@@ -23,6 +23,7 @@ class IByteReaderWithPosition;
 #include <list>
 
 typedef std::list<ParsedTextPlacementList> ParsedTextPlacementListList;
+typedef std::list<ParsedTextPlacementWithFormatList> ParsedTextPlacementWithFormatListList;
 typedef std::list<TableList> TableListList;
 typedef std::list<ExtractionWarning> ExtractionWarningList;
 typedef std::list<PDFRectangle> PDFRectangleList;
@@ -44,11 +45,13 @@ class TableExtraction : public ITextInterpreterHandler, IGraphicContentInterpret
 
         // IGraphicContentInterpreterHandler implementation
         virtual bool OnTextElementComplete(const TextElement& inTextElement);
+        virtual bool OnTextElementCompleteWithFormats(const TextElement& inTextElement, TextFormat inFormat);
         virtual bool OnPathPainted(const PathElement& inPathElement);
         virtual bool OnResourcesRead(const Resources& inResources, IInterpreterContext* inContext);
 
-        // ITextInterpreterHandler implementation
+        // ITextInterpreterHandler implementation OnParsedTextPlacementCompleteWithFormat
         virtual bool OnParsedTextPlacementComplete(const ParsedTextPlacement& inParsedTextPlacement); 
+        virtual bool OnParsedTextPlacementCompleteWithFormat(const ParsedTextPlacement& inParsedTextPlacement, TextFormat inFormat);
 
         // ITableLineInterpreterHandler implementation
         virtual bool OnParsedHorizontalLinePlacementComplete(const ParsedLinePlacement& inParsedLine); 
@@ -62,6 +65,7 @@ class TableExtraction : public ITextInterpreterHandler, IGraphicContentInterpret
         TableLineInterpreter tableLineInterpreter;
 
         ParsedTextPlacementListList textsForPages;
+        ParsedTextPlacementWithFormatListList textsForPagesWithFormats;
         LinesList tableLinesForPages;
         PDFRectangleList mediaBoxesForPages;
 

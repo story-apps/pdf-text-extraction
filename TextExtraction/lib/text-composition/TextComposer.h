@@ -23,6 +23,7 @@ class TextComposer {
 
 
         void ComposeText(const ParsedTextPlacementList& inTextPlacements, std::ostream& outStream);
+        void ComposeTextWithFormats(const ParsedTextPlacementWithFormatList& inTextPlacements);
 
     private:
         int bidiFlag;

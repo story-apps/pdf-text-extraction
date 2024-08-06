@@ -164,6 +164,115 @@ bool TextInterpeter::OnTextElementComplete(const TextElement& inTextElement) {
 
 }
 
+bool TextInterpeter::OnTextElementCompleteWithFormats(const TextElement& inTextElement, TextFormat inFormat) {
+    if(!handler)
+        return true;
+
+    bool shouldContinue = true;
+    PlacedTextCommandList::const_iterator commandIt = inTextElement.texts.begin();
+    double matrixBuffer[6];
+
+
+    bool hasDefaultTm = false;
+    double nextPlacementDefaultTm[6] = {1,0,0,1,0,0}; // variable used to store a default matrix accounting for glyph dispositions
+    for(; commandIt != inTextElement.texts.end() && shouldContinue; ++commandIt) {
+        const PlacedTextCommand& item = *commandIt;
+
+        // local matrix for this item. will be used to determine global box out of item local dimensions
+        double itemTextStateTm[6];
+
+        // choose the matrix affecting this item placement. If matrix changing operators were used in the state then it will be the state matrix,
+        // otherwise the new items matrix is just what was accumulated by accounting for glyph dispositions
+        if(!item.textState.tmDirty && hasDefaultTm)
+            CopyMatrix(nextPlacementDefaultTm, itemTextStateTm);
+        else
+            CopyMatrix(item.textState.tm, itemTextStateTm);
+
+        // Determine a decoder for the text font
+        FontDecoder* decoder = GetDecoderForFont(item.textState.fontRef.GetPtr());
+        if(!decoder)
+            continue;
+
+        CopyMatrix(itemTextStateTm, nextPlacementDefaultTm);
+        hasDefaultTm = true;
+        double descentPlacement = (decoder->descent + item.textState.rise)*item.textState.fontSize/1000;
+        double ascentPlacement = (decoder->ascent + item.textState.rise)*item.textState.fontSize/1000;
+        double spaceWidth = (decoder->spaceWidth*item.textState.fontSize + item.textState.charSpace + item.textState.wordSpace)*item.textState.scale/100;
+
+        PlacedTextCommandArgumentList::const_iterator argumentIt = item.text.begin();
+        for(;argumentIt != item.text.end() && shouldContinue;++argumentIt) {
+            if(argumentIt->isText) {
+                // compute text argument
+                double accumulatedDisplacement = 0;
+                double minPlacement = 0;
+                double maxPlacement = 0;
+
+                // Translate the text and accumulate
+                FontDecoderResult result = decoder->Translate(argumentIt->bytes);
+
+
+                // Compute the text dimensions and position/matrix
+                DispositionResultList dispositions = decoder->ComputeDisplacements(argumentIt->bytes);
+                DispositionResultList::iterator itDispositions = dispositions.begin();
+                for(; itDispositions != dispositions.end(); ++itDispositions) {
+                    double displacement = itDispositions->width;
+                    unsigned long charCode = itDispositions->code;
+                    double tx = (displacement*item.textState.fontSize + item.textState.charSpace + (charCode == 32 ? item.textState.wordSpace:0))*item.textState.scale/100;
+                    accumulatedDisplacement+=tx;
+                    if(accumulatedDisplacement<minPlacement)
+                        minPlacement = accumulatedDisplacement;
+                    if(accumulatedDisplacement>maxPlacement)
+                        maxPlacement = accumulatedDisplacement;
+                    double txMatrix[6] = {1,0,0,1,tx,0};
+                    MultiplyMatrix(txMatrix, nextPlacementDefaultTm, matrixBuffer);
+                    CopyMatrix(matrixBuffer,nextPlacementDefaultTm);
+                }
+
+                // prepare and report this text as text placement
+                double localBBox[4] = {minPlacement, descentPlacement, maxPlacement, ascentPlacement};
+                double globalBBox[4];
+                double globalWidthVector[2];
+                double widthVector[2] = {spaceWidth,0};
+                double zeroVector[2] = {0,0};
+                double transformedWidthVector[2];
+                double transformedZeroVector[2];
+
+                MultiplyMatrix(itemTextStateTm,item.graphicState.ctm, matrixBuffer);
+                TransformBox(localBBox, matrixBuffer, globalBBox);
+
+                TransformVector(widthVector, matrixBuffer, transformedWidthVector);
+                TransformVector(zeroVector, matrixBuffer, transformedZeroVector);
+                globalWidthVector[0] = abs(transformedWidthVector[0] - transformedZeroVector[0]);
+                globalWidthVector[1] = abs(transformedWidthVector[1] - transformedZeroVector[1]);
+
+
+                ParsedTextPlacement placement(
+                        result.asText,
+                        matrixBuffer,
+                        localBBox,
+                        globalBBox,
+                        spaceWidth,
+                        globalWidthVector
+
+                );
+
+                shouldContinue = handler->OnParsedTextPlacementCompleteWithFormat(placement, inFormat);
+            } else {
+                // compute displacements argument effect on position/matrix
+                double tx = ((-argumentIt->pos/1000)*item.textState.fontSize)*item.textState.scale/100;
+                double txMatrix[6] = {1,0,0,1,tx,0};
+                MultiplyMatrix(txMatrix, nextPlacementDefaultTm, matrixBuffer);
+                CopyMatrix(matrixBuffer,nextPlacementDefaultTm);
+            }
+
+            // for next placements within this item, the new matrix is the accumulated disposition matrix
+            CopyMatrix(nextPlacementDefaultTm, itemTextStateTm);
+        }
+    }
+
+    return shouldContinue;
+
+}
 
 
 bool TextInterpeter::OnResourcesRead(const Resources& inResources, IInterpreterContext* inContext) {
