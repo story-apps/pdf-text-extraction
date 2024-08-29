@@ -16,6 +16,7 @@
 #include "ErrorsAndWarnings.h"
 
 class PDFParser;
+class QTextDocument;
 
 #include <sstream>
 #include <string>
@@ -33,7 +34,7 @@ class TableExtraction : public ITextInterpreterHandler, IGraphicContentInterpret
         TableExtraction();
         virtual ~TableExtraction();
 
-        PDFHummus::EStatusCode ExtractTables(const std::string& inFilePath, long inStartPage=0, long inEndPage=-1);
+        PDFHummus::EStatusCode ExtractTables(const std::string& inFilePath, long inStartPage=0, long inEndPage=-1, bool inForQTextDocumentt = false);
 
         ExtractionError LatestError;
         ExtractionWarningList LatestWarnings;  
@@ -56,6 +57,7 @@ class TableExtraction : public ITextInterpreterHandler, IGraphicContentInterpret
 
         std::string GetTableAsCSVText(const Table& inTable, int bidiFlag, TextComposer::ESpacing spacingFlag);
         std::string GetAllAsCSVText(int bidiFlag, TextComposer::ESpacing spacingFlag);
+        void GetResultsAsDocument(QTextDocument& inDocument);
 
     private:
         TextInterpeter textInterpeter;
@@ -67,7 +69,7 @@ class TableExtraction : public ITextInterpreterHandler, IGraphicContentInterpret
         PDFRectangleList mediaBoxesForPages;
 
 
-        PDFHummus::EStatusCode ExtractTablePlacements(PDFParser* inParser, long inStartPage, long inEndPage);
+        PDFHummus::EStatusCode ExtractTablePlacements(PDFParser* inParser, long inStartPage, long inEndPage, bool inForQTextDocumentt = false);
         void ComposeTables();
         
 };

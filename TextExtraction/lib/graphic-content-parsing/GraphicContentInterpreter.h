@@ -29,7 +29,8 @@ public:
     bool InterpretPageContents(
         PDFParser* inParser,
         PDFDictionary* inPage,
-        IGraphicContentInterpreterHandler* inHandler);
+        IGraphicContentInterpreterHandler* inHandler,
+        bool inForQTextDocumentt = false);
     bool InterpretPageContentsWithFormats(
         PDFParser* inParser,
         PDFDictionary* inPage,

@@ -419,7 +419,8 @@ bool PDFRecursiveInterpreter::InterpretContentStreamWithFormats(
 bool PDFRecursiveInterpreter::InterpretPageContents(
     PDFParser* inParser,
     PDFDictionary* inPage,
-    IPDFRecursiveInterpreterHandler* inHandler) {
+    IPDFRecursiveInterpreterHandler* inHandler,
+    bool inForQTextDocumentt) {
 
     
     RefCountPtr<PDFObject> contents(inParser->QueryDictionaryObject(inPage, scContents));
@@ -430,10 +431,20 @@ bool PDFRecursiveInterpreter::InterpretPageContents(
     inHandler->OnResourcesRead(&context);
 
     if(contents->GetType() == PDFObject::ePDFObjectArray) {
-        return InterpretContentStream(inParser, inPage, inParser->StartReadingObjectsFromStreams((PDFArray*)contents.GetPtr()),&context, inHandler);
+        if (inForQTextDocumentt) {
+            context.includeFormats = true;
+            return InterpretContentStreamWithFormats(inParser, inPage, inParser->StartReadingObjectsFromStreams((PDFArray*)contents.GetPtr()),&context, inHandler);
+        } else {
+            return InterpretContentStream(inParser, inPage, inParser->StartReadingObjectsFromStreams((PDFArray*)contents.GetPtr()),&context, inHandler);
+        }
     }
     else if(contents->GetType() == PDFObject::ePDFObjectStream) {
-        return InterpretContentStream(inParser, inPage, inParser->StartReadingObjectsFromStream((PDFStreamInput*)contents.GetPtr()),&context , inHandler);
+        if (inForQTextDocumentt) {
+            context.includeFormats = true;
+            return InterpretContentStreamWithFormats(inParser, inPage, inParser->StartReadingObjectsFromStream((PDFStreamInput*)contents.GetPtr()),&context , inHandler);
+        } else {
+            return InterpretContentStream(inParser, inPage, inParser->StartReadingObjectsFromStream((PDFStreamInput*)contents.GetPtr()),&context , inHandler);
+        }
     }
 
     return true;

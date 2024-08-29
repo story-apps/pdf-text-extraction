@@ -30,7 +30,8 @@ GraphicContentInterpreter::~GraphicContentInterpreter(void) {
 bool GraphicContentInterpreter::InterpretPageContents(
     PDFParser* inParser,
     PDFDictionary* inPage,
-    IGraphicContentInterpreterHandler* inHandler) {
+    IGraphicContentInterpreterHandler* inHandler,
+    bool inForQTextDocumentt) {
     
     if(!inHandler) // yeah im gonna require a handler here.
         return true;
@@ -39,7 +40,7 @@ bool GraphicContentInterpreter::InterpretPageContents(
 
     handler = inHandler;
     InitInterpretationState();
-    bool result = interpreter.InterpretPageContents(inParser, inPage, this); 
+    bool result = interpreter.InterpretPageContents(inParser, inPage, this, inForQTextDocumentt);
     ResetInterpretationState();
     return result;
 }

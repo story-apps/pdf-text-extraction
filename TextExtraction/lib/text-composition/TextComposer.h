@@ -1,10 +1,14 @@
 #pragma once
 
 #include "../text-parsing/ParsedTextPlacement.h"
+#include "PDFRectangle.h"
 
 #include <string>
 #include <list>
 #include <sstream>
+
+class QTextCursor;
+struct Lines;
 
 class TextComposer {
     public:
@@ -22,7 +26,8 @@ class TextComposer {
 
 
         void ComposeText(const ParsedTextPlacementList& inTextPlacements);
-        void ComposeTextWithFormats(const ParsedTextPlacementWithFormatList& inTextPlacements);
+        void ComposeDocument(const ParsedTextPlacementWithFormatList& inTextPlacements, const PDFRectangle& inMediaBox,
+                             const Lines& inPageLines, QTextCursor& inCursor);
 
         void AppendText(const std::string inText); // use this for extra chars
 
@@ -33,6 +38,7 @@ class TextComposer {
         int bidiFlag;
         ESpacing spacingFlag;
         std::stringstream buffer;
+        std::string lastWtrittenText;
 
     void MergeLineStreamToResultString(
         const std::stringstream& inStream, 

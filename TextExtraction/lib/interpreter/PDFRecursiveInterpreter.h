@@ -20,7 +20,8 @@ public:
     bool InterpretPageContents(
         PDFParser* inParser,
         PDFDictionary* inPage,
-        IPDFRecursiveInterpreterHandler* inHandler);
+        IPDFRecursiveInterpreterHandler* inHandler,
+        bool inForQTextDocumentt = false);
 
     bool InterpretPageContentsWithFormats(
         PDFParser* inParser,
