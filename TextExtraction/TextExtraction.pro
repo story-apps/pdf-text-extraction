@@ -3,8 +3,6 @@ TEMPLATE = lib
 
 CONFIG += staticlib
 
-QT -= core gui
-
 LIBSDIR = ../../../_build/libs
 
 #

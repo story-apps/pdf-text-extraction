@@ -11,6 +11,7 @@
 #include "./lib/table-csv-export/TableCSVExport.h"
 #include "./lib/table-composition/TableComposer.h"
 
+#include <QTextCursor>
 
 
 using namespace std;
@@ -69,7 +70,7 @@ bool TableExtraction::OnResourcesRead(const Resources& inResources, IInterpreter
     return textInterpeter.OnResourcesRead(inResources, inContext);
 }
 
-EStatusCode TableExtraction::ExtractTablePlacements(PDFParser* inParser, long inStartPage, long inEndPage) {
+EStatusCode TableExtraction::ExtractTablePlacements(PDFParser* inParser, long inStartPage, long inEndPage, bool inForQTextDocument) {
     EStatusCode status = eSuccess;
     unsigned long start = (unsigned long)(inStartPage >= 0 ? inStartPage : (inParser->GetPagesCount() + inStartPage));
     unsigned long end = (unsigned long)(inEndPage >= 0 ? inEndPage :  (inParser->GetPagesCount() + inEndPage));
@@ -92,9 +93,10 @@ EStatusCode TableExtraction::ExtractTablePlacements(PDFParser* inParser, long in
 
         mediaBoxesForPages.push_back(pageInput.GetMediaBox());
         textsForPages.push_back(ParsedTextPlacementList());
+        textsForPagesWithFormats.push_back(ParsedTextPlacementWithFormatList());
         tableLinesForPages.push_back(Lines());
         // the interpreter will trigger the textInterpreter which in turn will trigger this object to collect text elements
-        interpreter.InterpretPageContents(inParser, pageObject.GetPtr(), this);  
+        interpreter.InterpretPageContents(inParser, pageObject.GetPtr(), this, inForQTextDocument);
     }    
 
     textInterpeter.ResetInterpretationState();
@@ -114,7 +116,7 @@ void TableExtraction::ClearState() {
     LatestError.description = scEmpty;
 }
 
-EStatusCode TableExtraction::ExtractTables(const std::string& inFilePath, long inStartPage, long inEndPage) {
+EStatusCode TableExtraction::ExtractTables(const std::string& inFilePath, long inStartPage, long inEndPage, bool inForQTextDocument) {
     EStatusCode status = eSuccess;
     InputFile sourceFile;
 
@@ -138,11 +140,13 @@ EStatusCode TableExtraction::ExtractTables(const std::string& inFilePath, long i
             break;
         }
 
-        status = ExtractTablePlacements(&parser, inStartPage, inEndPage);
+        status = ExtractTablePlacements(&parser, inStartPage, inEndPage, inForQTextDocument);
         if(status != eSuccess)
             break;
 
-        ComposeTables();
+        if (!inForQTextDocument) {
+            ComposeTables();
+        }
     } while(false);
 
     return status;
@@ -184,7 +188,43 @@ PDFHummus::EStatusCode TableExtraction::ExtractTables(IByteReaderWithPosition* i
     return status;    
 }
 
+PDFHummus::EStatusCode TableExtraction::ExtractTables(PDFParser* inParser, long inStartPage, long inEndPage) {
+    ClearState();
 
+    PDFHummus::EStatusCode status = ExtractTablePlacements(inParser, inStartPage, inEndPage);
+    if(status == eSuccess) {
+        ComposeTables();
+    }
+
+    return status;
+}
+
+PDFHummus::EStatusCode TableExtraction::ExtractTables(IByteReaderWithPosition* inStream, long inStartPage, long inEndPage)  {
+    EStatusCode status = eSuccess;
+
+    ClearState();
+
+    do {
+        PDFParser parser;
+        status = parser.StartPDFParsing(inStream);
+        if(status != eSuccess)
+        {
+            LatestError.code = eErrorInternalPDFWriter;
+            LatestError.description = string("Failed to parse file");
+            break;
+        }
+
+        status = ExtractTablePlacements(&parser, inStartPage, inEndPage, inForQTextDocument);
+        if(status != eSuccess)
+            break;
+
+        if (!inForQTextDocument) {
+            ComposeTables();
+        }
+    } while(false);
+
+    return status;    
+}
 
 void TableExtraction::ComposeTables() {
     TableComposer tableComposer;
@@ -226,4 +266,25 @@ void TableExtraction::GetAllAsCSVText(int bidiFlag, TextComposer::ESpacing spaci
         outStream<<scCRLN;
         outStream<<scCRLN;
     }
+}
+
+void TableExtraction::GetResultsAsDocument(QTextDocument& inDocument)
+{
+    QTextCursor cursor(&inDocument);
+    cursor.beginEditBlock();
+
+    TextComposer composer(0, TextComposer::eSpacingHorizontal);
+    ParsedTextPlacementWithFormatListList::iterator itTextsforPages
+        = textsForPagesWithFormats.begin();
+    LinesList::iterator itTablesLinesForPages = tableLinesForPages.begin();
+    PDFRectangleList::iterator itMediaBoxForPages = mediaBoxesForPages.begin();
+
+    for (; itTextsforPages != textsForPagesWithFormats.end()
+         && itTablesLinesForPages != tableLinesForPages.end()
+         && itMediaBoxForPages != mediaBoxesForPages.end();
+         ++itTextsforPages, ++itTablesLinesForPages, ++itMediaBoxForPages) {
+        composer.ComposeDocument(*itTextsforPages, *itMediaBoxForPages, *itTablesLinesForPages,
+                                 cursor);
+    }
+    cursor.endEditBlock();
 }

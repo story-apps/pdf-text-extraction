@@ -16,6 +16,7 @@
 #include "ErrorsAndWarnings.h"
 
 class PDFParser;
+class QTextDocument;
 class IByteReaderWithPosition;
 
 #include <sstream>
@@ -34,7 +35,7 @@ class TableExtraction : public ITextInterpreterHandler, IGraphicContentInterpret
         TableExtraction();
         virtual ~TableExtraction();
 
-        PDFHummus::EStatusCode ExtractTables(const std::string& inFilePath, long inStartPage=0, long inEndPage=-1);
+        PDFHummus::EStatusCode ExtractTables(const std::string& inFilePath, long inStartPage=0, long inEndPage=-1, bool inForQTextDocumentt = false);
         PDFHummus::EStatusCode ExtractTables(PDFParser* inParser, long inStartPage=0, long inEndPage=-1);
         PDFHummus::EStatusCode ExtractTables(IByteReaderWithPosition* inStream, long inStartPage=0, long inEndPage=-1);
 
@@ -59,6 +60,7 @@ class TableExtraction : public ITextInterpreterHandler, IGraphicContentInterpret
 
         void GetTableAsCSVText(const Table& inTable, int bidiFlag, TextComposer::ESpacing spacingFlag, std::ostream& outStream);
         void GetAllAsCSVText(int bidiFlag, TextComposer::ESpacing spacingFlag, std::ostream& outStream);
+        void GetResultsAsDocument(QTextDocument& inDocument);
 
     private:
         TextInterpeter textInterpeter;
@@ -70,7 +72,7 @@ class TableExtraction : public ITextInterpreterHandler, IGraphicContentInterpret
         PDFRectangleList mediaBoxesForPages;
 
 
-        PDFHummus::EStatusCode ExtractTablePlacements(PDFParser* inParser, long inStartPage, long inEndPage);
+        PDFHummus::EStatusCode ExtractTablePlacements(PDFParser* inParser, long inStartPage, long inEndPage, bool inForQTextDocumentt = false);
         void ComposeTables();
         void ClearState();
         
