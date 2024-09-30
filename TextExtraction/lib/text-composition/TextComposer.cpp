@@ -662,6 +662,19 @@ static double PageFooterLinePosition(const PDFRectangle& inMediaBox, const Lines
 }
 
 /**
+ * @brief Имеет ли текстовый итем наклон
+ */
+static bool HasRotation(const ParsedTextPlacement& inTextPlacement)
+{
+    //
+    // Угол наклона текста в PDF определяется как atan2(matrix[1], matrix[0])
+    // или как atan2(-matrix[2], matrix[0]), если текст имеет искажение (skewing);
+    // но чтобы сказать что он ненулевой, достаточно оценить первый параметр
+    //
+    return abs(inTextPlacement.matrix[1]) > 0 || abs(inTextPlacement.matrix[2]) > 0;
+}
+
+/**
  * @brief Основной размер текста
  */
 static double GeneralTextSize(const ParsedTextPlacementVectorWithFormats::iterator& inIterator,
@@ -671,18 +684,22 @@ static double GeneralTextSize(const ParsedTextPlacementVectorWithFormats::iterat
     std::set<TextItems, decltype(compare)> items(compare);
 
     for (auto iterator = inIterator; iterator != inEnd; ++iterator) {
-        if (!isEmptyString(iterator->first.text)) {
-            double height = int(BoxHeight(iterator->first.globalBbox) * 100) / 100.0;
-            double width = BoxWidth(iterator->first.globalBbox);
-            auto itItems = items.find(TextItems(height, 0, 0));
-            if (itItems != items.end()) {
-                TextItems newItems(height, itItems->length + width, itItems->count + 1);
-                items.erase(itItems);
-                items.insert(newItems);
-            } else {
-                TextItems newItems(height, width, 1);
-                items.insert(newItems);
-            }
+        //
+        // Пропускаем пробельные символы или вотермарки (текст с наклоном)
+        //
+        if (isEmptyString(iterator->first.text) || HasRotation(iterator->first)) {
+            continue;
+        }
+        double height = int(BoxHeight(iterator->first.globalBbox) * 100) / 100.0;
+        double width = BoxWidth(iterator->first.globalBbox);
+        auto itItems = items.find(TextItems(height, 0, 0));
+        if (itItems != items.end()) {
+            TextItems newItems(height, itItems->length + width, itItems->count + 1);
+            items.erase(itItems);
+            items.insert(newItems);
+        } else {
+            TextItems newItems(height, width, 1);
+            items.insert(newItems);
         }
     }
 
@@ -739,7 +756,6 @@ static bool IsBeyondRightTextBorder(const ParsedTextPlacement& inTextPlacement,
 {
     return inTextPlacement.globalBbox[2] > inPageParameters.minRightMargin;
 }
-
 
 void TextComposer::MergeLineStreamToResultString(const stringstream& inStream, int bidiFlag,
                                                  bool shouldAddSpacesPerLines,
@@ -864,14 +880,19 @@ void TextComposer::ComposeDocument(const ParsedTextPlacementWithFormatList& inTe
     bool shouldSubtractNumberPosition = IsNumberAndDot(itCommands->first.text) ? true : false;
 
     //
-    // Не учитыаем то, что выходит за границы текста справа (номера сцен)
-    // или колонтитулы
+    // Не учитыаем то, что выходит за границы текста справа (номера сцен),
+    // колонтитулы или вотермарки (текст с наклоном)
     //
     while (itCommands != sortedTextCommands.end()
            && (IsBeyondRightTextBorder(itCommands->first, pageParameters)
-               || IsPageHeaderOrFooter(itCommands->first, pageParameters))) {
+               || IsPageHeaderOrFooter(itCommands->first, pageParameters)
+               || HasRotation(itCommands->first))) {
         ++itCommands;
     }
+
+    //
+    // Проверяем, что после пропуска ненужных итемов мы не дошли до конца
+    //
     if (itCommands == sortedTextCommands.end()) {
         return;
     }
@@ -886,11 +907,13 @@ void TextComposer::ComposeDocument(const ParsedTextPlacementWithFormatList& inTe
     ++itCommands;
     for (; itCommands != sortedTextCommands.end(); ++itCommands) {
         //
-        // Не учитыаем то, что выходит за границы текста справа - номера сцен
-        // или колонтитулы (и иногда всякий мусор в виде пробельных символов)
+        // Не учитыаем то, что выходит за границы текста справа - номера сцен,
+        // колонтитулы, вотермарки (текст с наклоном)
+        // или всякий мусор в виде пробельных символов
         //
         if (IsBeyondRightTextBorder(itCommands->first, pageParameters)
-            || IsPageHeaderOrFooter(itCommands->first, pageParameters)) {
+            || IsPageHeaderOrFooter(itCommands->first, pageParameters)
+            || HasRotation(itCommands->first)) {
             continue;
         }
 
