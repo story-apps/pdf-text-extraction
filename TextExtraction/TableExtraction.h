@@ -24,7 +24,7 @@ class IByteReaderWithPosition;
 #include <list>
 
 typedef std::list<ParsedTextPlacementList> ParsedTextPlacementListList;
-typedef std::list<ParsedTextPlacementWithFormatList> ParsedTextPlacementWithFormatListList;
+typedef std::list<ParsedTextPlacementWithParametersList> ParsedTextPlacementWithParametersListList;
 typedef std::list<TableList> TableListList;
 typedef std::list<ExtractionWarning> ExtractionWarningList;
 typedef std::list<PDFRectangle> PDFRectangleList;
@@ -46,13 +46,14 @@ class TableExtraction : public ITextInterpreterHandler, IGraphicContentInterpret
 
         // IGraphicContentInterpreterHandler implementation
         virtual bool OnTextElementComplete(const TextElement& inTextElement);
-        virtual bool OnTextElementCompleteWithFormats(const TextElement& inTextElement, TextFormat inFormat);
+        virtual bool OnTextElementCompleteWithParameters(const TextElement& inTextElement, const TextParameters& inParameters);
         virtual bool OnPathPainted(const PathElement& inPathElement);
         virtual bool OnResourcesRead(const Resources& inResources, IInterpreterContext* inContext);
 
         // ITextInterpreterHandler implementation OnParsedTextPlacementCompleteWithFormat
-        virtual bool OnParsedTextPlacementComplete(const ParsedTextPlacement& inParsedTextPlacement); 
-        virtual bool OnParsedTextPlacementCompleteWithFormat(const ParsedTextPlacement& inParsedTextPlacement, TextFormat inFormat);
+        virtual bool OnParsedTextPlacementComplete(const ParsedTextPlacement& inParsedTextPlacement);
+        virtual bool OnParsedTextPlacementCompleteWithParameters(
+            const ParsedTextPlacement& inParsedTextPlacement, const TextParameters& inParameters);
 
         // ITableLineInterpreterHandler implementation
         virtual bool OnParsedHorizontalLinePlacementComplete(const ParsedLinePlacement& inParsedLine); 
@@ -67,7 +68,7 @@ class TableExtraction : public ITextInterpreterHandler, IGraphicContentInterpret
         TableLineInterpreter tableLineInterpreter;
 
         ParsedTextPlacementListList textsForPages;
-        ParsedTextPlacementWithFormatListList textsForPagesWithFormats;
+        ParsedTextPlacementWithParametersListList textsForPagesWithParameters;
         LinesList tableLinesForPages;
         PDFRectangleList mediaBoxesForPages;
 

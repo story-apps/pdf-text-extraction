@@ -111,8 +111,8 @@ bool GraphicContentInterpreter::OnOperation(const std::string& inOperation,  con
     } else if(inOperation == "BT") {
         return BTCommand();
     } else if(inOperation == "ET") {
-        if (inContext->includeFormats) {
-            return ETCommandWithFormat(inContext->currentFormat);
+        if (inContext->textParameters.shouldProcess) {
+            return ETCommandWithParameters(inContext->textParameters);
         } else {
             return ETCommand();
         }
@@ -373,7 +373,7 @@ bool GraphicContentInterpreter::EndTextElement() {
     return handler->OnTextElementComplete(el);
 }
 
-bool GraphicContentInterpreter::EndTextElementWithFormat(TextFormat inFormat) {
+bool GraphicContentInterpreter::EndTextElementWithParameters(const TextParameters& inParameters) {
     if(!isInTextElement) // ET without BT. ignore.
         return true;
 
@@ -399,15 +399,15 @@ bool GraphicContentInterpreter::EndTextElementWithFormat(TextFormat inFormat) {
     textGraphicStateStack.clear();
 
     // forward the new text element to the client
-    return handler->OnTextElementCompleteWithFormats(el, inFormat);
+    return handler->OnTextElementCompleteWithParameters(el, inParameters);
 }
 
 bool GraphicContentInterpreter::ETCommand() {
     return EndTextElement();
 }
 
-bool GraphicContentInterpreter::ETCommandWithFormat(TextFormat inFormat) {
-    return EndTextElementWithFormat(inFormat);
+bool GraphicContentInterpreter::ETCommandWithParameters(const TextParameters& inParameters) {
+    return EndTextElementWithParameters(inParameters);
 }
 
 void GraphicContentInterpreter::setTm(const double (&matrix)[6]) {

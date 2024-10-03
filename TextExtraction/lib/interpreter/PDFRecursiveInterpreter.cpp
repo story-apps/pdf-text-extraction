@@ -5,6 +5,7 @@
 #include "PDFObjectCast.h"
 #include "PDFParser.h"
 #include "PDFArray.h"
+#include "PDFReal.h"
 #include "PDFStreamInput.h"
 #include "PDFSymbol.h"
 #include "PDFIndirectObjectReference.h"
@@ -309,20 +310,31 @@ bool PDFRecursiveInterpreter::InterpretContentStreamWithFormats(
         if(anObject->GetType() == PDFObject::ePDFObjectSymbol) {
             PDFSymbol* anOperand = (PDFSymbol*)anObject;
             if (anOperand->GetValue() == "Tf") {
-                inContext->currentFormat = TextFormat::regular;
+                inContext->textParameters.currentFormat = TextFormat::regular;
                 if (operandsStack.size() > 1) {
                     const PDFName *currentFont = (PDFName*)operandsStack.at(operandsStack.size() - 2);
                     const auto baseFont = inParser->GetBaseFontName(currentFont);
                     if (baseFont.find("Bold") != std::string::npos || baseFont.find("bold") != std::string::npos) {
-                        inContext->currentFormat = TextFormat::bold;
+                        inContext->textParameters.currentFormat = TextFormat::bold;
                     }
                     if (baseFont.find("Italic") != std::string::npos || baseFont.find("italic") != std::string::npos) {
-                        if (inContext->currentFormat == TextFormat::bold) {
-                            inContext->currentFormat = TextFormat::italicBold;
+                        if (inContext->textParameters.currentFormat == TextFormat::bold) {
+                            inContext->textParameters.currentFormat = TextFormat::italicBold;
                         } else {
-                            inContext->currentFormat = TextFormat::italic;
+                            inContext->textParameters.currentFormat = TextFormat::italic;
                         }
                     }
+                }
+            } else if (anOperand->GetValue() == "rg") {
+                if (operandsStack.size() > 2) {
+                    inContext->textParameters.colorRGB.red = ((PDFReal*)operandsStack.at(operandsStack.size() - 3))->GetValue();
+                    inContext->textParameters.colorRGB.green = ((PDFReal*)operandsStack.at(operandsStack.size() - 2))->GetValue();
+                    inContext->textParameters.colorRGB.blue = ((PDFReal*)operandsStack.at(operandsStack.size() - 1))->GetValue();
+                }
+            } else if (anOperand->GetValue() == "gs") {
+                if (operandsStack.size() > 0) {
+                    const PDFName *graphicState = (PDFName*)operandsStack.at(operandsStack.size() - 1);
+                    inContext->textParameters.constantAlpha = inParser->GetConstantAplha(graphicState);
                 }
             }
 
@@ -330,7 +342,7 @@ bool PDFRecursiveInterpreter::InterpretContentStreamWithFormats(
             shouldContinue = inHandler->OnOperation(anOperand->GetValue(), operandsStack, inContext);
 
             if (anOperand->GetValue() == "ET") {
-                inContext->currentFormat = TextFormat::regular;
+                inContext->textParameters.clear();
             }
 
             bool shouldRecurseIntoForm = false;
@@ -432,7 +444,7 @@ bool PDFRecursiveInterpreter::InterpretPageContents(
 
     if(contents->GetType() == PDFObject::ePDFObjectArray) {
         if (inForQTextDocumentt) {
-            context.includeFormats = true;
+            context.textParameters.shouldProcess = true;
             return InterpretContentStreamWithFormats(inParser, inPage, inParser->StartReadingObjectsFromStreams((PDFArray*)contents.GetPtr()),&context, inHandler);
         } else {
             return InterpretContentStream(inParser, inPage, inParser->StartReadingObjectsFromStreams((PDFArray*)contents.GetPtr()),&context, inHandler);
@@ -440,7 +452,7 @@ bool PDFRecursiveInterpreter::InterpretPageContents(
     }
     else if(contents->GetType() == PDFObject::ePDFObjectStream) {
         if (inForQTextDocumentt) {
-            context.includeFormats = true;
+            context.textParameters.shouldProcess = true;
             return InterpretContentStreamWithFormats(inParser, inPage, inParser->StartReadingObjectsFromStream((PDFStreamInput*)contents.GetPtr()),&context , inHandler);
         } else {
             return InterpretContentStream(inParser, inPage, inParser->StartReadingObjectsFromStream((PDFStreamInput*)contents.GetPtr()),&context , inHandler);
@@ -462,7 +474,7 @@ bool PDFRecursiveInterpreter::InterpretPageContentsWithFormats(
 
     InterpreterContext context(inParser, inPage);
     inHandler->OnResourcesRead(&context);
-    context.includeFormats = true;
+    context.textParameters.shouldProcess = true;
 
     if(contents->GetType() == PDFObject::ePDFObjectArray) {
         return InterpretContentStreamWithFormats(inParser, inPage, inParser->StartReadingObjectsFromStreams((PDFArray*)contents.GetPtr()),&context, inHandler);
