@@ -48,18 +48,20 @@ bool TableExtraction::OnParsedTextPlacementComplete(const ParsedTextPlacement& i
     return true;
 }
 
-bool TableExtraction::OnParsedTextPlacementCompleteWithFormat(const ParsedTextPlacement& inParsedTextPlacement, TextFormat format) {
-    textsForPagesWithFormats.back().push_back(std::pair<ParsedTextPlacement, TextFormat>(inParsedTextPlacement, format));
+bool TableExtraction::OnParsedTextPlacementCompleteWithParameters(
+    const ParsedTextPlacement& inParsedTextPlacement, const TextParameters& inParameters)
+{
+    textsForPagesWithParameters.back().push_back(
+        std::pair<ParsedTextPlacement, TextParameters>(inParsedTextPlacement, inParameters));
     return true;
 }
-
 
 bool TableExtraction::OnTextElementComplete(const TextElement& inTextElement) {
     return textInterpeter.OnTextElementComplete(inTextElement);
 }
 
-bool TableExtraction::OnTextElementCompleteWithFormats(const TextElement& inTextElement, TextFormat inFormat) {
-    return textInterpeter.OnTextElementCompleteWithFormats(inTextElement, inFormat);
+bool TableExtraction::OnTextElementCompleteWithParameters(const TextElement& inTextElement, const TextParameters& inParameters) {
+    return textInterpeter.OnTextElementCompleteWithParameters(inTextElement, inParameters);
 }
 
 bool TableExtraction::OnPathPainted(const PathElement& inPathElement) {
@@ -93,7 +95,7 @@ EStatusCode TableExtraction::ExtractTablePlacements(PDFParser* inParser, long in
 
         mediaBoxesForPages.push_back(pageInput.GetMediaBox());
         textsForPages.push_back(ParsedTextPlacementList());
-        textsForPagesWithFormats.push_back(ParsedTextPlacementWithFormatList());
+        textsForPagesWithParameters.push_back(ParsedTextPlacementWithParametersList());
         tableLinesForPages.push_back(Lines());
         // the interpreter will trigger the textInterpreter which in turn will trigger this object to collect text elements
         interpreter.InterpretPageContents(inParser, pageObject.GetPtr(), this, inForQTextDocument);
@@ -201,12 +203,12 @@ void TableExtraction::GetResultsAsDocument(QTextDocument& inDocument)
     cursor.beginEditBlock();
 
     TextComposer composer(0, TextComposer::eSpacingHorizontal);
-    ParsedTextPlacementWithFormatListList::iterator itTextsforPages
-        = textsForPagesWithFormats.begin();
+    ParsedTextPlacementWithParametersListList::iterator itTextsforPages
+        = textsForPagesWithParameters.begin();
     LinesList::iterator itTablesLinesForPages = tableLinesForPages.begin();
     PDFRectangleList::iterator itMediaBoxForPages = mediaBoxesForPages.begin();
 
-    for (; itTextsforPages != textsForPagesWithFormats.end()
+    for (; itTextsforPages != textsForPagesWithParameters.end()
          && itTablesLinesForPages != tableLinesForPages.end()
          && itMediaBoxForPages != mediaBoxesForPages.end();
          ++itTextsforPages, ++itTablesLinesForPages, ++itMediaBoxForPages) {

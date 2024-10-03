@@ -34,8 +34,7 @@ class IInterpreterContext {
     // note that parser will become available only once intepretation starts!
     virtual PDFObjectParser* GetObjectParser() =0;
 
-    bool includeFormats = false;
-    TextFormat currentFormat = TextFormat::regular;
+    TextParameters textParameters;
 };
 
 

@@ -164,7 +164,7 @@ bool TextInterpeter::OnTextElementComplete(const TextElement& inTextElement) {
 
 }
 
-bool TextInterpeter::OnTextElementCompleteWithFormats(const TextElement& inTextElement, TextFormat inFormat) {
+bool TextInterpeter::OnTextElementCompleteWithParameters(const TextElement& inTextElement, const TextParameters& inParameters) {
     if(!handler)
         return true;
 
@@ -256,7 +256,7 @@ bool TextInterpeter::OnTextElementCompleteWithFormats(const TextElement& inTextE
 
                 );
 
-                shouldContinue = handler->OnParsedTextPlacementCompleteWithFormat(placement, inFormat);
+                shouldContinue = handler->OnParsedTextPlacementCompleteWithParameters(placement, inParameters);
             } else {
                 // compute displacements argument effect on position/matrix
                 double tx = ((-argumentIt->pos/1000)*item.textState.fontSize)*item.textState.scale/100;

@@ -23,6 +23,8 @@ static const double scPageTopPartCoefficient = 9 / 10.0;
 static const double scPageBottomPartCoefficient = 1 / 10.0;
 static const double scPageLeftPartCoefficient = 1 / 5.0;
 static const double scPageRightPartCoefficient = 4 / 5.0;
+static const double scConstantAlphaMin = 0.00001;
+static const double scConstantAlphaMax = 0.99999;
 
 typedef QPair<QString, TextFormat> FormatString;
 
@@ -42,7 +44,8 @@ struct ParagraphBox {
     };
     QList<Line> lines;
 
-    void clear() {
+    void clear()
+    {
         lines.clear();
         for (int i = 0; i != 4; ++i) {
             box[i] = 0;
@@ -168,21 +171,22 @@ bool CompareParsedTextPlacement(const ParsedTextPlacement& a, const ParsedTextPl
     return codeA < codeB;
 }
 
-bool CompareParsedTextPlacementWithFormats(const std::pair<ParsedTextPlacement, TextFormat>& a,
-                                           const std::pair<ParsedTextPlacement, TextFormat>& b) {
+typedef std::vector<ParsedTextPlacement> ParsedTextPlacementVector;
+typedef std::pair<ParsedTextPlacement, TextParameters> ParsedTextPlacementWithParameters;
+typedef std::vector<ParsedTextPlacementWithParameters> ParsedTextPlacementVectorWithParameters;
+
+bool CompareParsedTextPlacementWithParameters(const ParsedTextPlacementWithParameters& a,
+                                              const ParsedTextPlacementWithParameters& b)
+{
     int codeA = GetOrientationCode(a.first);
     int codeB = GetOrientationCode(b.first);
 
-    if(codeA == codeB) {
+    if (codeA == codeB) {
         return CompareForOrientation(a.first, b.first, codeA);
     }
 
     return codeA < codeB;
 }
-
-typedef std::vector<ParsedTextPlacement> ParsedTextPlacementVector;
-typedef std::vector<std::pair<ParsedTextPlacement, TextFormat>>
-    ParsedTextPlacementVectorWithFormats;
 
 bool AreSameLine(const ParsedTextPlacement& a, const ParsedTextPlacement& b) {
     int codeA = GetOrientationCode(a);
@@ -224,7 +228,8 @@ unsigned long GuessHorizontalSpacingBetweenPlacements(const ParsedTextPlacement&
 /**
  * @brief Добавить границы строки к границам параграфа
  */
-static void AddLineToParagraphBox(const double (&inNewLineBox)[4], ParagraphBox& outParagraph) {
+static void AddLineToParagraphBox(const double (&inNewLineBox)[4], ParagraphBox& outParagraph)
+{
     if (outParagraph.lines.empty()) {
         CopyBox(inNewLineBox, outParagraph.box);
     } else {
@@ -261,7 +266,8 @@ static bool IsNewParagraph(const double (&inPreviousLineBox)[4], const double (&
 
     const bool onRightSide
         = inNewLineBox[2] - inPageParameters.mediaBox.UpperRightX * scPageRightPartCoefficient > 0
-        && inPreviousLineBox[2] - inPageParameters.mediaBox.UpperRightX * scPageRightPartCoefficient > 0;
+        && inPreviousLineBox[2] - inPageParameters.mediaBox.UpperRightX * scPageRightPartCoefficient
+            > 0;
 
     //
     // Считаем, что новый параграф, если:
@@ -412,7 +418,7 @@ static bool isEmptyString(const std::string& inString)
 /**
  * @brief Минимальный отступ слева
  */
-static double MinLeftMargin(const ParsedTextPlacementVectorWithFormats& inTextPlacements,
+static double MinLeftMargin(const ParsedTextPlacementVectorWithParameters& inTextPlacements,
                             const PDFRectangle& inMediaBox)
 {
     //
@@ -427,7 +433,7 @@ static double MinLeftMargin(const ParsedTextPlacementVectorWithFormats& inTextPl
     bool startsWithNumber = IsNumber(it->first.text) ? true : false;
     bool shouldSubtractNumberPosition = IsNumberAndDot(it->first.text) ? true : false;
 
-    std::pair<ParsedTextPlacement, TextFormat> latestItem = *it;
+    ParsedTextPlacementWithParameters latestItem = *it;
     ++it;
     for (; it != inTextPlacements.end(); ++it) {
         //
@@ -483,7 +489,7 @@ static double MinLeftMargin(const ParsedTextPlacementVectorWithFormats& inTextPl
  * @brief Минимальный отступ справа
  * @note Считается от левого края
  */
-static double MinRightMargin(const ParsedTextPlacementVectorWithFormats& inTextPlacements)
+static double MinRightMargin(const ParsedTextPlacementVectorWithParameters& inTextPlacements)
 {
     double minRightMargin = -1; // считается от левого края
     auto it = inTextPlacements.rbegin();
@@ -491,7 +497,7 @@ static double MinRightMargin(const ParsedTextPlacementVectorWithFormats& inTextP
 
     bool endsWithDot = IsDotOrColon(it->first.text) ? true : false;
     bool endsWithNumberAndDot = IsNumberAndDot(it->first.text) ? true : false;
-    std::pair<ParsedTextPlacement, TextFormat> latestItem = *it;
+    ParsedTextPlacementWithParameters latestItem = *it;
     ++it;
     for (; it != inTextPlacements.rend(); ++it) {
         //
@@ -578,11 +584,12 @@ static std::string InsertText(const QList<FormatString>& inLineText, QTextCursor
 /**
  * @brief Границы строки текста
  */
-static ParagraphBox::Line LineBox(const ParsedTextPlacementVectorWithFormats::iterator inIterator,
-                                  const ParsedTextPlacementVectorWithFormats::iterator inEnd)
+static ParagraphBox::Line LineBox(
+    const ParsedTextPlacementVectorWithParameters::iterator inIterator,
+    const ParsedTextPlacementVectorWithParameters::iterator inEnd)
 {
-    ParsedTextPlacementVectorWithFormats::iterator iterator = inIterator;
-    std::pair<ParsedTextPlacement, TextFormat>& firstItem = *iterator;
+    ParsedTextPlacementVectorWithParameters::iterator iterator = inIterator;
+    ParsedTextPlacementWithParameters& firstItem = *iterator;
     ParagraphBox::Line line;
     CopyBox(inIterator->first.globalBbox, line.box);
     ++iterator;
@@ -662,32 +669,88 @@ static double PageFooterLinePosition(const PDFRectangle& inMediaBox, const Lines
 }
 
 /**
+ * @brief Выходит ли итем за правую границу текста
+ */
+static bool IsBeyondRightTextBorder(const ParsedTextPlacementWithParameters& inItem,
+                                    const PageParameters& inPageParameters)
+{
+    return inItem.first.globalBbox[2] > inPageParameters.minRightMargin;
+}
+
+/**
+ * @brief Является ли итем верхним или нижним колонтитулом
+ */
+static bool IsPageHeaderOrFooter(const ParsedTextPlacementWithParameters& inItem,
+                                 const PageParameters& inPageParameters)
+{
+    const bool beyondBorders = inItem.first.globalBbox[1] > inPageParameters.headerLinePosition
+        || inItem.first.globalBbox[3] < inPageParameters.footerLinePosition;
+
+    const bool smallTextOnEdge
+        = BoxHeight(inItem.first.globalBbox) < inPageParameters.generalTextSize
+        && (inItem.first.globalBbox[1]
+                > inPageParameters.mediaBox.UpperRightY * scPageTopPartCoefficient
+            || inItem.first.globalBbox[3]
+                < inPageParameters.mediaBox.UpperRightY * scPageBottomPartCoefficient);
+
+    return beyondBorders || smallTextOnEdge;
+}
+
+/**
  * @brief Имеет ли текстовый итем наклон
  */
-static bool HasRotation(const ParsedTextPlacement& inTextPlacement)
+static bool HasRotation(const ParsedTextPlacementWithParameters& inItem)
 {
     //
     // Угол наклона текста в PDF определяется как atan2(matrix[1], matrix[0])
     // или как atan2(-matrix[2], matrix[0]), если текст имеет искажение (skewing);
     // но чтобы сказать что он ненулевой, достаточно оценить первый параметр
     //
-    return abs(inTextPlacement.matrix[1]) > 0 || abs(inTextPlacement.matrix[2]) > 0;
+    return abs(inItem.first.matrix[1]) > 0 || abs(inItem.first.matrix[2]) > 0;
+}
+
+/**
+ * @brief Является ли текстовый итем прозрачным
+ */
+static bool IsTransparent(const ParsedTextPlacementWithParameters& inItem)
+{
+    return !isEmptyString(inItem.first.text) && inItem.second.constantAlpha > scConstantAlphaMin
+        && inItem.second.constantAlpha < scConstantAlphaMax;
+}
+
+/**
+ * @brief Является ли текстовый итем частью сценария
+ */
+static bool IsScript(const ParsedTextPlacementWithParameters& inItem,
+                     const PageParameters& inPageParameters)
+{
+    //
+    // Не считаем текстовый итем частью сценария, если он:
+    // 1. выходит за границы текста справа (обычно это номера сцен или всякий мусор в виде
+    //    пробельных символов);
+    // 2. является колонтитулом;
+    // 3. является водяным знаком (текст с наклоном или прозрачный);
+    //
+    return !IsBeyondRightTextBorder(inItem, inPageParameters)
+        && !IsPageHeaderOrFooter(inItem, inPageParameters) && !HasRotation(inItem)
+        && !IsTransparent(inItem);
 }
 
 /**
  * @brief Основной размер текста
  */
-static double GeneralTextSize(const ParsedTextPlacementVectorWithFormats::iterator& inIterator,
-                              const ParsedTextPlacementVectorWithFormats::iterator& inEnd)
+static double GeneralTextSize(const ParsedTextPlacementVectorWithParameters::iterator& inIterator,
+                              const ParsedTextPlacementVectorWithParameters::iterator& inEnd)
 {
     const auto compare = [](const TextItems& _lhs, const TextItems& _rhs) { return _lhs < _rhs; };
     std::set<TextItems, decltype(compare)> items(compare);
 
     for (auto iterator = inIterator; iterator != inEnd; ++iterator) {
         //
-        // Пропускаем пробельные символы или вотермарки (текст с наклоном)
+        // Пропускаем пробельные символы и вотермарки (текст с наклоном или прозрачный)
         //
-        if (isEmptyString(iterator->first.text) || HasRotation(iterator->first)) {
+        if (isEmptyString(iterator->first.text) || HasRotation(*iterator)
+            || IsTransparent(*iterator)) {
             continue;
         }
         double height = int(BoxHeight(iterator->first.globalBbox) * 100) / 100.0;
@@ -729,32 +792,6 @@ static double GeneralTextSize(const ParsedTextPlacementVectorWithFormats::iterat
     }
 
     return generalItems->height;
-}
-
-/**
- * @brief Является ли итем верхним или нижним колонтитулом
- */
-static bool IsPageHeaderOrFooter(const ParsedTextPlacement& inTextPlacement,
-                                 const PageParameters& inPageParameters)
-{
-    const bool beyondBorders = inTextPlacement.globalBbox[1] > inPageParameters.headerLinePosition
-        || inTextPlacement.globalBbox[3] < inPageParameters.footerLinePosition;
-
-    const bool smallTextOnEdge = BoxHeight(inTextPlacement.globalBbox) < inPageParameters.generalTextSize
-        && (inTextPlacement.globalBbox[1] > inPageParameters.mediaBox.UpperRightY * scPageTopPartCoefficient
-            || inTextPlacement.globalBbox[3]
-                < inPageParameters.mediaBox.UpperRightY * scPageBottomPartCoefficient);
-
-    return beyondBorders || smallTextOnEdge;
-}
-
-/**
- * @brief Выходит ли итем за правую границу текста
- */
-static bool IsBeyondRightTextBorder(const ParsedTextPlacement& inTextPlacement,
-                                    const PageParameters& inPageParameters)
-{
-    return inTextPlacement.globalBbox[2] > inPageParameters.minRightMargin;
 }
 
 void TextComposer::MergeLineStreamToResultString(const stringstream& inStream, int bidiFlag,
@@ -841,16 +878,16 @@ void TextComposer::Reset() {
     buffer.str(scEmpty);
 }
 
-void TextComposer::ComposeDocument(const ParsedTextPlacementWithFormatList& inTextPlacements,
+void TextComposer::ComposeDocument(const ParsedTextPlacementWithParametersList& inTextPlacements,
                                    const PDFRectangle& inMediaBox, const Lines& inPageLines,
                                    QTextCursor& inCursor)
 {
-    ParsedTextPlacementVectorWithFormats sortedTextCommands(inTextPlacements.begin(),
+    ParsedTextPlacementVectorWithParameters sortedTextCommands(inTextPlacements.begin(),
                                                             inTextPlacements.end());
     sort(sortedTextCommands.begin(), sortedTextCommands.end(),
-         CompareParsedTextPlacementWithFormats);
+         CompareParsedTextPlacementWithParameters);
 
-    ParsedTextPlacementVectorWithFormats::iterator itCommands = sortedTextCommands.begin();
+    ParsedTextPlacementVectorWithParameters::iterator itCommands = sortedTextCommands.begin();
     if (itCommands == sortedTextCommands.end()) {
         return;
     }
@@ -880,13 +917,9 @@ void TextComposer::ComposeDocument(const ParsedTextPlacementWithFormatList& inTe
     bool shouldSubtractNumberPosition = IsNumberAndDot(itCommands->first.text) ? true : false;
 
     //
-    // Не учитыаем то, что выходит за границы текста справа (номера сцен),
-    // колонтитулы или вотермарки (текст с наклоном)
+    // Пропускаем итемы, которые не относятся к тексту сценария
     //
-    while (itCommands != sortedTextCommands.end()
-           && (IsBeyondRightTextBorder(itCommands->first, pageParameters)
-               || IsPageHeaderOrFooter(itCommands->first, pageParameters)
-               || HasRotation(itCommands->first))) {
+    while (itCommands != sortedTextCommands.end() && !IsScript(*itCommands, pageParameters)) {
         ++itCommands;
     }
 
@@ -897,29 +930,25 @@ void TextComposer::ComposeDocument(const ParsedTextPlacementWithFormatList& inTe
         return;
     }
 
-    std::pair<ParsedTextPlacement, TextFormat>& latestItem = *itCommands;
+    ParsedTextPlacementWithParameters& latestItem = *itCommands;
     CopyBox(itCommands->first.globalBbox, lineBox);
 
     QList<FormatString> lineTextWithFormats;
     lineTextWithFormats.append(
-        { QString::fromStdString(itCommands->first.text), itCommands->second });
+        { QString::fromStdString(itCommands->first.text), itCommands->second.currentFormat });
 
     ++itCommands;
     for (; itCommands != sortedTextCommands.end(); ++itCommands) {
         //
-        // Не учитыаем то, что выходит за границы текста справа - номера сцен,
-        // колонтитулы, вотермарки (текст с наклоном)
-        // или всякий мусор в виде пробельных символов
+        // Пропускаем итемы, которые не относятся к тексту сценария
         //
-        if (IsBeyondRightTextBorder(itCommands->first, pageParameters)
-            || IsPageHeaderOrFooter(itCommands->first, pageParameters)
-            || HasRotation(itCommands->first)) {
+        if (!IsScript(*itCommands, pageParameters)) {
             continue;
         }
 
         //
         // Иногда встречаются мусорные (выходящие за границы строки) пробелы,
-        // поэтому вначале новой строки будем их пропускать
+        // поэтому при переходе на новую строку будем их пропускать
         //
         if (!AreSameLine(latestItem.first, itCommands->first)) {
             while (itCommands != sortedTextCommands.end()
@@ -941,11 +970,9 @@ void TextComposer::ComposeDocument(const ParsedTextPlacementWithFormatList& inTe
             }
 
             //
-            // Проверяем, что после пропуска пробельных символов текущий символ не выходит за
-            // границы
+            // Проверяем, что после пропуска пробельных символов текущий относится к тексту сценария
             //
-            if (IsBeyondRightTextBorder(itCommands->first, pageParameters)
-                || IsPageHeaderOrFooter(itCommands->first, pageParameters)) {
+            if (!IsScript(*itCommands, pageParameters)) {
                 continue;
             }
         }
@@ -1052,7 +1079,7 @@ void TextComposer::ComposeDocument(const ParsedTextPlacementWithFormatList& inTe
         }
 
         lineTextWithFormats.append(
-            { QString::fromStdString(itCommands->first.text), itCommands->second });
+            { QString::fromStdString(itCommands->first.text), itCommands->second.currentFormat });
         if (!isEmptyString(itCommands->first.text)) {
             latestItem = *itCommands;
         }

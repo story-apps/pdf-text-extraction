@@ -82,7 +82,7 @@ private:
     bool TfCommand(const PDFObjectVector& inOperands);
     bool BTCommand();
     bool ETCommand();
-    bool ETCommandWithFormat(TextFormat inFormat);
+    bool ETCommandWithParameters(const TextParameters& inParameters);
     bool TdCommand(const PDFObjectVector& inOperands);
     bool TDCommand(const PDFObjectVector& inOperands);
     bool TmCommand(const PDFObjectVector& inOperands);
@@ -132,7 +132,7 @@ private:
 
     void StartTextElement();
     bool EndTextElement();
-    bool EndTextElementWithFormat(TextFormat inFormat);
+    bool EndTextElementWithParameters(const TextParameters& inParameters);
 
     void RecordTextPlacement(const PlacedTextCommandArgument& inTextPlacementOperation);
     void RecordTextPlacement(const PlacedTextCommandArgumentList& inTextPlacementOperations);

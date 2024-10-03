@@ -26,7 +26,7 @@ class TextComposer {
 
 
         void ComposeText(const ParsedTextPlacementList& inTextPlacements);
-        void ComposeDocument(const ParsedTextPlacementWithFormatList& inTextPlacements, const PDFRectangle& inMediaBox,
+        void ComposeDocument(const ParsedTextPlacementWithParametersList& inTextPlacements, const PDFRectangle& inMediaBox,
                              const Lines& inPageLines, QTextCursor& inCursor);
 
         void AppendText(const std::string inText); // use this for extra chars

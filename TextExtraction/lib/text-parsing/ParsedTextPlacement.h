@@ -33,4 +33,24 @@ struct ParsedTextPlacement {
 typedef std::list<ParsedTextPlacement> ParsedTextPlacementList;
 
 enum TextFormat { regular, italic, bold, italicBold };
-typedef std::list<std::pair<ParsedTextPlacement, TextFormat>> ParsedTextPlacementWithFormatList;
+
+struct TextParameters {
+    bool shouldProcess = false;
+    TextFormat currentFormat = TextFormat::regular;
+    double constantAlpha = 1;
+    struct {
+        double red = 0;
+        double green = 0;
+        double blue = 0;
+    } colorRGB;
+
+    void clear()
+    {
+        currentFormat = TextFormat::regular;
+        constantAlpha = 1;
+        colorRGB = {};
+    }
+};
+
+typedef std::list<std::pair<ParsedTextPlacement, TextParameters>> ParsedTextPlacementWithParametersList;
+
