@@ -5,7 +5,6 @@
 #include "PDFObjectCast.h"
 #include "PDFParser.h"
 #include "PDFArray.h"
-#include "PDFReal.h"
 #include "PDFStreamInput.h"
 #include "PDFSymbol.h"
 #include "PDFIndirectObjectReference.h"
@@ -14,6 +13,16 @@
 
 #include <string>
 #include <algorithm>
+
+#define WRITE_STREAM_CONTENT 0 // _DEBUG
+#if WRITE_STREAM_CONTENT
+#include <QFile>
+#include "PDFBoolean.h"
+#include "PDFLiteralString.h"
+#include "PDFHexString.h"
+#include "PDFInteger.h"
+#include "PDFObjectParser.h"
+#endif
 
 using namespace std;
 using namespace PDFHummus;
@@ -306,32 +315,23 @@ bool PDFRecursiveInterpreter::InterpretContentStreamWithFormats(
 
     PDFObject* anObject = inObjectParser->ParseNewObject();
 
+#if WRITE_STREAM_CONTENT
+    QFile file("stream_content.txt");
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Append)) {
+        return false;
+    }
+    file.write("--- page begin ---\n");
+#endif
+
     while(!!anObject && shouldContinue) {
         if(anObject->GetType() == PDFObject::ePDFObjectSymbol) {
             PDFSymbol* anOperand = (PDFSymbol*)anObject;
-            if (anOperand->GetValue() == "Tf") {
-                inContext->textParameters.currentFormat = TextFormat::regular;
-                if (operandsStack.size() > 1) {
-                    const PDFName *currentFont = (PDFName*)operandsStack.at(operandsStack.size() - 2);
-                    const auto baseFont = inParser->GetBaseFontName(currentFont);
-                    if (baseFont.find("Bold") != std::string::npos || baseFont.find("bold") != std::string::npos) {
-                        inContext->textParameters.currentFormat = TextFormat::bold;
-                    }
-                    if (baseFont.find("Italic") != std::string::npos || baseFont.find("italic") != std::string::npos) {
-                        if (inContext->textParameters.currentFormat == TextFormat::bold) {
-                            inContext->textParameters.currentFormat = TextFormat::italicBold;
-                        } else {
-                            inContext->textParameters.currentFormat = TextFormat::italic;
-                        }
-                    }
-                }
-            } else if (anOperand->GetValue() == "rg") {
-                if (operandsStack.size() > 2) {
-                    inContext->textParameters.colorRGB.red = ((PDFReal*)operandsStack.at(operandsStack.size() - 3))->GetValue();
-                    inContext->textParameters.colorRGB.green = ((PDFReal*)operandsStack.at(operandsStack.size() - 2))->GetValue();
-                    inContext->textParameters.colorRGB.blue = ((PDFReal*)operandsStack.at(operandsStack.size() - 1))->GetValue();
-                }
-            } else if (anOperand->GetValue() == "gs") {
+#if WRITE_STREAM_CONTENT
+            file.write("- ");
+            file.write(anOperand->GetValue().c_str());
+            file.write("\n");
+#endif
+            if (anOperand->GetValue() == "gs") {
                 if (operandsStack.size() > 0) {
                     const PDFName *graphicState = (PDFName*)operandsStack.at(operandsStack.size() - 1);
                     inContext->textParameters.constantAlpha = inParser->GetConstantAplha(graphicState);
@@ -418,12 +418,86 @@ bool PDFRecursiveInterpreter::InterpretContentStreamWithFormats(
         }
         else {
             operandsStack.push_back(anObject);
+
+#if WRITE_STREAM_CONTENT
+            switch (anObject->GetType()) {
+            case PDFObject::ePDFObjectBoolean: {
+                file.write("[PDFBoolean]");
+                PDFBoolean* anOperand = (PDFBoolean*)anObject;
+                file.write((QString::number(anOperand->GetValue())).toStdString().c_str());
+                break;
+            }
+            case PDFObject::ePDFObjectLiteralString: {
+                file.write("[PDFLiteralString]");
+                PDFLiteralString* anOperand = (PDFLiteralString*)anObject;
+                file.write(anOperand->GetValue().c_str());
+                break;
+            }
+            case PDFObject::ePDFObjectHexString: {
+                file.write("[PDFHexString]");
+                PDFHexString* anOperand = (PDFHexString*)anObject;
+                file.write(anOperand->GetValue().c_str());
+                break;
+            }
+            case PDFObject::ePDFObjectNull: {
+                file.write("-object_NULL-");
+                break;
+            }
+            case PDFObject::ePDFObjectName: {
+                file.write("[PDFName]");
+                PDFName* anOperand = (PDFName*)anObject;
+                file.write(anOperand->GetValue().c_str());
+                break;
+            }
+            case PDFObject::ePDFObjectInteger: {
+                file.write("[PDFInteger]");
+                PDFInteger* anOperand = (PDFInteger*)anObject;
+                file.write((QString::number(anOperand->GetValue())).toStdString().c_str());
+                break;
+            }
+            case PDFObject::ePDFObjectReal: {
+                file.write("[PDFReal]");
+                PDFReal* anOperand = (PDFReal*)anObject;
+                file.write((QString::number(anOperand->GetValue())).toStdString().c_str());
+                break;
+            }
+            case PDFObject::ePDFObjectArray: {
+                file.write("-object_Array-");
+                break;
+            }
+            case PDFObject::ePDFObjectDictionary: {
+                file.write("-object_Dictionary-");
+                break;
+            }
+            case PDFObject::ePDFObjectIndirectObjectReference: {
+                file.write("-object_IndirectReference-");
+                break;
+            }
+            case PDFObject::ePDFObjectStream: {
+                file.write("-object_Stream-");
+                break;
+            }
+            case PDFObject::ePDFObjectSymbol: {
+                file.write("[PDFSymbol]");
+                PDFSymbol* anOperand = (PDFSymbol*)anObject;
+                file.write(anOperand->GetValue().c_str());
+                break;
+            }
+            }
+            file.write(" ");
+#endif
+
         }
         anObject = inObjectParser->ParseNewObject();
     }
 
     FreeObjectVector(operandsStack);
     delete inObjectParser; // The passed object parser is owned by this method, so dispose when done
+
+#if WRITE_STREAM_CONTENT
+    file.write("\n--- page end ---\n");
+    file.close();
+#endif
 
     return shouldContinue;
 }

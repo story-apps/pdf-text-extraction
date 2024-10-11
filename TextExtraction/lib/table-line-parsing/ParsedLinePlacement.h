@@ -9,18 +9,21 @@ struct ParsedLinePlacement {
         ZeroVector(globalPointOne);
         ZeroVector(globalPointTwo);
         ZeroVector(effectiveLineWidth);
+        ZeroVector(colorRGB);
     }
 
     ParsedLinePlacement(
         bool inIsVertical,
         const double (&inGlobalPointOne)[2],
         const double (&inGlobalPointTwo)[2],
-        const double (&inEffectiveLineWidth)[2]
+        const double (&inEffectiveLineWidth)[2],
+        const double (&inColorRGB)[3] = {}
     ) {
         isVertical = inIsVertical;
         CopyVector(inGlobalPointOne, globalPointOne);
         CopyVector(inGlobalPointTwo, globalPointTwo);
         CopyVector(inEffectiveLineWidth, effectiveLineWidth);
+        CopyVector(inColorRGB, colorRGB);
     }
 
     bool isVertical;
@@ -31,4 +34,6 @@ struct ParsedLinePlacement {
     double globalPointTwo[2];
     // width having the matrix applied.
     double effectiveLineWidth[2];
+
+    double colorRGB[3];
 };
