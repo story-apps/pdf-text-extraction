@@ -58,6 +58,7 @@ private:
     GraphicStateList graphicStateStack;
     TextGraphicStateList textGraphicStateStack;
     Path currentPath;
+    double currentColorRGB[3] = {};
 
     bool isInTextElement;
     PlacedTextCommandList currentTextElementCommands;
@@ -107,6 +108,7 @@ private:
     bool bCommand(const PDFObjectVector& inOperands);
     bool bStarCommand(const PDFObjectVector& inOperands);
     bool nCommand(const PDFObjectVector& inOperands);
+    bool setCurrentColor(const PDFObjectVector& inOperands);
 
     void PushGraphicState();
     void PopGraphicState();

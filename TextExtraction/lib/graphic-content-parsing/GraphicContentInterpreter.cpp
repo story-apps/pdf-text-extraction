@@ -5,8 +5,6 @@
 #include "ParsedPrimitiveHelper.h"
 #include "PDFObjectCast.h"
 #include "PDFArray.h"
-#include "PDFLiteralString.h"
-#include "PDFHexString.h"
 #include "PDFDictionary.h"
 #include "PDFIndirectObjectReference.h"
 #include "PDFParser.h"
@@ -15,6 +13,7 @@
 #include "../math/Transformations.h"
 #include "../interpreter/PDFRecursiveInterpreter.h"
 #include "../pdf-writer-enhancers/Bytes.h"
+
 
 using namespace std;
 
@@ -107,6 +106,23 @@ bool GraphicContentInterpreter::OnOperation(const std::string& inOperation,  con
     } else if(inOperation == "Ts") {
         return TsCommand(inOperands);
     } else if(inOperation == "Tf") {
+        inContext->textParameters.currentFormat = TextFormat::regular;
+        if (inOperands.size() > 1) {
+            const PDFName* currentFont = (PDFName*)inOperands.at(inOperands.size() - 2);
+            const auto baseFont = inContext->GetParser()->GetBaseFontName(currentFont);
+            if (baseFont.find("Bold") != std::string::npos
+                || baseFont.find("bold") != std::string::npos) {
+                inContext->textParameters.currentFormat = TextFormat::bold;
+            }
+            if (baseFont.find("Italic") != std::string::npos
+                || baseFont.find("italic") != std::string::npos) {
+                if (inContext->textParameters.currentFormat == TextFormat::bold) {
+                    inContext->textParameters.currentFormat = TextFormat::italicBold;
+                } else {
+                    inContext->textParameters.currentFormat = TextFormat::italic;
+                }
+            }
+        }
         return TfCommand(inOperands);
     } else if(inOperation == "BT") {
         return BTCommand();
@@ -171,6 +187,10 @@ bool GraphicContentInterpreter::OnOperation(const std::string& inOperation,  con
         return bStarCommand(inOperands);
     } else if(inOperation == "n") {
         return nCommand(inOperands);
+    } else if(inOperation == "scn") {
+        return setCurrentColor(inOperands);
+    } else if(inOperation == "rg") {
+        return setCurrentColor(inOperands);
     }
 
     return true;
@@ -702,6 +722,7 @@ bool GraphicContentInterpreter::PaintCurrentPath(bool inShouldStroke, bool inSho
     PathElement pathElement = {
         Path(currentPath),
         ContentGraphicState(CurrentGraphicState()),
+        { currentColorRGB[0], currentColorRGB[1], currentColorRGB[2], },
         inShouldStroke,
         inShouldFill,
         inFillMethod
@@ -709,7 +730,7 @@ bool GraphicContentInterpreter::PaintCurrentPath(bool inShouldStroke, bool inSho
 
     ClearCurrentPath();
 
-    return handler->OnPathPainted(pathElement);   
+    return handler->OnPathPainted(pathElement);
 }
 
 bool GraphicContentInterpreter::SCommand(const PDFObjectVector& inOperands) {
@@ -770,6 +791,15 @@ bool GraphicContentInterpreter::bStarCommand(const PDFObjectVector& inOperands) 
 
 bool GraphicContentInterpreter::nCommand(const PDFObjectVector& inOperands) {
     ClearCurrentPath();
+    return true;
+}
+
+bool GraphicContentInterpreter::setCurrentColor(const PDFObjectVector& inOperands) {
+    if (inOperands.size() > 2) {
+        currentColorRGB[0] = ParsedPrimitiveHelper(inOperands[inOperands.size() - 3]).GetAsDouble();
+        currentColorRGB[1] = ParsedPrimitiveHelper(inOperands[inOperands.size() - 2]).GetAsDouble();
+        currentColorRGB[2] = ParsedPrimitiveHelper(inOperands[inOperands.size() - 1]).GetAsDouble();
+    }
     return true;
 }
 

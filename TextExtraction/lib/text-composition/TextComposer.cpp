@@ -9,10 +9,11 @@
 #include <math.h>
 #include <set>
 
-#include <QTextCursor>
-#include <QTextBlock>
-#include <QString>
+#include <QColor>
 #include <QRegularExpression>
+#include <QString>
+#include <QTextBlock>
+#include <QTextCursor>
 
 using namespace std;
 
@@ -23,10 +24,28 @@ static const double scPageTopPartCoefficient = 9 / 10.0;
 static const double scPageBottomPartCoefficient = 1 / 10.0;
 static const double scPageLeftPartCoefficient = 1 / 5.0;
 static const double scPageRightPartCoefficient = 4 / 5.0;
-static const double scConstantAlphaMin = 0.00001;
-static const double scConstantAlphaMax = 0.99999;
+static const double scConstantAlphaMin = 0.001;
+static const double scConstantAlphaMax = 0.999;
+static const double scColorMax = 0.99;
 
-typedef QPair<QString, TextFormat> FormatString;
+struct ColorRGB {
+    double red = 1;
+    double green = 1;
+    double blue = 1;
+};
+
+struct FormatString {
+    FormatString(const QString& inText = QString(), TextFormat inFormat = TextFormat::regular,
+                 const ColorRGB &inColor = ColorRGB())
+        : text(inText)
+        , format(inFormat)
+        , backgroundColor(inColor)
+    {
+    }
+    QString text;
+    TextFormat format;
+    ColorRGB backgroundColor;
+};
 
 struct PageParameters {
     PDFRectangle mediaBox;
@@ -373,7 +392,7 @@ static std::string ExtractText(const QList<FormatString>& inLineText)
 {
     std::string text;
     for (auto itText = inLineText.constBegin(); itText != inLineText.constEnd(); ++itText) {
-        text.append(itText->first.toStdString());
+        text.append(itText->text.toStdString());
     }
     return text;
 }
@@ -548,6 +567,46 @@ static double MinRightMargin(const ParsedTextPlacementVectorWithParameters& inTe
 }
 
 /**
+ * @brief Является ли цвет белым
+ */
+static bool IsWhite(const double (&inColor)[3])
+{
+    return inColor[0] > scColorMax && inColor[1] > scColorMax && inColor[2] > scColorMax;
+}
+
+/**
+ * @brief Цвет фоновой заливки текста
+ */
+static ColorRGB BackgroundColor(const Lines& inPageLines, const double (&inTextBox)[4])
+{
+    //
+    // Немного скорректируем границы текста, чтобы не учитывались соседние линии
+    // и учитывем случай, когда ширина текста равна нулю
+    //
+    const double height = inTextBox[3] - inTextBox[1];
+    const double leftEdge = inTextBox[0] + height / 10;
+    const double rightEdge = (inTextBox[2] - inTextBox[0]) > height / 10
+        ? inTextBox[2] - height / 10
+        : inTextBox[2] + height / 3;
+
+    ColorRGB color;
+    for (const auto& itLines : inPageLines.horizontalLines) {
+        if (itLines.globalPointOne[1] > inTextBox[1] && itLines.globalPointOne[1] < inTextBox[3]
+            && itLines.globalPointOne[0] < leftEdge && itLines.globalPointTwo[0] > rightEdge
+            && !IsWhite(itLines.colorRGB)) {
+            if (itLines.effectiveLineWidth[0] > (inTextBox[3] - inTextBox[1])
+                && itLines.effectiveLineWidth[1] > (inTextBox[3] - inTextBox[1])) {
+                color.red = itLines.colorRGB[0];
+                color.green = itLines.colorRGB[1];
+                color.blue = itLines.colorRGB[2];
+            }
+            break;
+        }
+    }
+    return color;
+}
+
+/**
  * @brief Вставить текст с форматом
  * @return Записанный текст
  */
@@ -557,7 +616,7 @@ static std::string InsertText(const QList<FormatString>& inLineText, QTextCursor
     auto itText = inLineText.constBegin();
     for (; itText != inLineText.constEnd(); ++itText) {
         QTextCharFormat format;
-        switch (itText->second) {
+        switch (itText->format) {
         case TextFormat::bold: {
             format.setFontWeight(QFont::Bold);
             break;
@@ -575,8 +634,14 @@ static std::string InsertText(const QList<FormatString>& inLineText, QTextCursor
             break;
         }
         }
-        inCursor.insertText(itText->first, format);
-        text.append(itText->first.toStdString());
+        QColor color(itText->backgroundColor.red * 255, itText->backgroundColor.green * 255,
+                     itText->backgroundColor.blue * 255);
+        if (color.isValid() && color != Qt::white) {
+            format.setForeground(Qt::black);
+            format.setBackground(color);
+        }
+        inCursor.insertText(itText->text, format);
+        text.append(itText->text.toStdString());
     }
     return text;
 }
@@ -883,7 +948,7 @@ void TextComposer::ComposeDocument(const ParsedTextPlacementWithParametersList& 
                                    QTextCursor& inCursor)
 {
     ParsedTextPlacementVectorWithParameters sortedTextCommands(inTextPlacements.begin(),
-                                                            inTextPlacements.end());
+                                                               inTextPlacements.end());
     sort(sortedTextCommands.begin(), sortedTextCommands.end(),
          CompareParsedTextPlacementWithParameters);
 
@@ -934,8 +999,9 @@ void TextComposer::ComposeDocument(const ParsedTextPlacementWithParametersList& 
     CopyBox(itCommands->first.globalBbox, lineBox);
 
     QList<FormatString> lineTextWithFormats;
-    lineTextWithFormats.append(
-        { QString::fromStdString(itCommands->first.text), itCommands->second.currentFormat });
+    lineTextWithFormats.append({ QString::fromStdString(itCommands->first.text),
+                                 itCommands->second.currentFormat,
+                                 BackgroundColor(inPageLines, itCommands->first.globalBbox) });
 
     ++itCommands;
     for (; itCommands != sortedTextCommands.end(); ++itCommands) {
@@ -957,7 +1023,7 @@ void TextComposer::ComposeDocument(const ParsedTextPlacementWithParametersList& 
                 // ... нормальные пробелы пишем
                 //
                 if (AreSameLine(latestItem.first, itCommands->first)) {
-                    lineTextWithFormats.append({ QString(" "), TextFormat::regular });
+                    lineTextWithFormats.append({ " " });
                 }
                 ++itCommands;
             }
@@ -985,8 +1051,7 @@ void TextComposer::ComposeDocument(const ParsedTextPlacementWithParametersList& 
                 unsigned long spaces
                     = GuessHorizontalSpacingBetweenPlacements(latestItem.first, itCommands->first);
                 if (spaces != 0) {
-                    lineTextWithFormats.append(
-                        { QString(" ").repeated(spaces), TextFormat::regular });
+                    lineTextWithFormats.append({ " " });
                 }
             }
 
@@ -1001,7 +1066,7 @@ void TextComposer::ComposeDocument(const ParsedTextPlacementWithParametersList& 
                 // это номер сцены и добавим пробел, т.к. иногда он не считывается
                 //
                 if (latestItem.first.globalBbox[0] < pageParameters.minLeftMargin) {
-                    lineTextWithFormats.append({ QString(" "), TextFormat::regular });
+                    lineTextWithFormats.append({ " " });
                 } else {
                     //
                     // ... если не выходит, считаем, что это номер реплики - его не пишем
@@ -1034,7 +1099,14 @@ void TextComposer::ComposeDocument(const ParsedTextPlacementWithParametersList& 
             if (IsNumberAndDot(previousLineText) || IsNumber(previousLineText)) {
                 lineTextWithFormats.clear();
             } else {
-                lineTextWithFormats.append({ QString(" "), TextFormat::regular });
+                //
+                // Добавляем к предыдущей строке пробел с тем же выделением цветом, что и у
+                // последнего записанного символа, чтобы многострочная редакторская заметка не
+                // разбивалась на несколько
+                //
+                lineTextWithFormats.append(
+                    { " ", TextFormat::regular,
+                      BackgroundColor(inPageLines, latestItem.first.globalBbox) });
 
                 //
                 // Костыль для импорта из КИТа - убираем дублирующиеся строки при переходе на новую
@@ -1078,15 +1150,16 @@ void TextComposer::ComposeDocument(const ParsedTextPlacementWithParametersList& 
             CopyBox(itCommands->first.globalBbox, lineBox);
         }
 
-        lineTextWithFormats.append(
-            { QString::fromStdString(itCommands->first.text), itCommands->second.currentFormat });
+        lineTextWithFormats.append({ QString::fromStdString(itCommands->first.text),
+                                     itCommands->second.currentFormat,
+                                     BackgroundColor(inPageLines, itCommands->first.globalBbox) });
         if (!isEmptyString(itCommands->first.text)) {
             latestItem = *itCommands;
         }
     }
     const std::string previousLineText = ExtractText(lineTextWithFormats);
     if (!IsNumberAndDot(previousLineText) && !IsNumber(previousLineText)) {
-        lineTextWithFormats.append({ QString(" "), TextFormat::regular });
+        lineTextWithFormats.append({ " " });
         lastWtrittenText = InsertText(lineTextWithFormats, inCursor);
     }
     AddLineToParagraphBox(lineBox, paragraph);

@@ -253,7 +253,8 @@ bool TableLineInterpreter::OnFillPathPainted(const PathElement& inPathElement) {
                 false,
                 left,
                 right,
-                widthVector
+                widthVector,
+                inPathElement.colorRGB
             );
 
             shouldContinue = handler->OnParsedHorizontalLinePlacementComplete(linePlacement);
