@@ -29,13 +29,7 @@ public:
     bool InterpretPageContents(
         PDFParser* inParser,
         PDFDictionary* inPage,
-        IGraphicContentInterpreterHandler* inHandler,
-        bool inForQTextDocumentt = false);
-    bool InterpretPageContentsWithFormats(
-        PDFParser* inParser,
-        PDFDictionary* inPage,
         IGraphicContentInterpreterHandler* inHandler);
-
 
     // IPDFRecursiveInterpreterHandler implementation
     virtual bool OnOperation(const std::string& inOperation,  const PDFObjectVector& inOperands, IInterpreterContext* inContext);
@@ -74,16 +68,15 @@ private:
     bool QCommand();
     bool cmCommand(const PDFObjectVector& inOperands);
     bool wCommand(const PDFObjectVector& inOperands);
-    bool gsCommand(const PDFObjectVector& inOperands);
+    bool gsCommand(const PDFObjectVector& inOperands, IInterpreterContext* inContext);
     bool TcCommand(const PDFObjectVector& inOperands);
     bool TwCommand(const PDFObjectVector& inOperands);
     bool TzCommand(const PDFObjectVector& inOperands);
     bool TLCommand(const PDFObjectVector& inOperands);
     bool TsCommand(const PDFObjectVector& inOperands);
-    bool TfCommand(const PDFObjectVector& inOperands);
+    bool TfCommand(const PDFObjectVector& inOperands, IInterpreterContext* inContext);
     bool BTCommand();
-    bool ETCommand();
-    bool ETCommandWithParameters(const TextParameters& inParameters);
+    bool ETCommand(IInterpreterContext* inContext);
     bool TdCommand(const PDFObjectVector& inOperands);
     bool TDCommand(const PDFObjectVector& inOperands);
     bool TmCommand(const PDFObjectVector& inOperands);
@@ -133,8 +126,7 @@ private:
     void Quote(PDFObject* inObject);
 
     void StartTextElement();
-    bool EndTextElement();
-    bool EndTextElementWithParameters(const TextParameters& inParameters);
+    bool EndTextElement(IInterpreterContext* inContext);
 
     void RecordTextPlacement(const PlacedTextCommandArgument& inTextPlacementOperation);
     void RecordTextPlacement(const PlacedTextCommandArgumentList& inTextPlacementOperations);

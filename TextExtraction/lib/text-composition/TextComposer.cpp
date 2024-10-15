@@ -17,6 +17,8 @@
 
 using namespace std;
 
+typedef std::vector<ParsedTextPlacement> ParsedTextPlacementVector;
+
 static const string scEmpty = "";
 static const char scSpace = ' ';
 static const string scCRLN = "\r\n";
@@ -185,23 +187,6 @@ bool CompareParsedTextPlacement(const ParsedTextPlacement& a, const ParsedTextPl
 
     if(codeA == codeB) {
         return CompareForOrientation(a,b,codeA);
-    }
-
-    return codeA < codeB;
-}
-
-typedef std::vector<ParsedTextPlacement> ParsedTextPlacementVector;
-typedef std::pair<ParsedTextPlacement, TextParameters> ParsedTextPlacementWithParameters;
-typedef std::vector<ParsedTextPlacementWithParameters> ParsedTextPlacementVectorWithParameters;
-
-bool CompareParsedTextPlacementWithParameters(const ParsedTextPlacementWithParameters& a,
-                                              const ParsedTextPlacementWithParameters& b)
-{
-    int codeA = GetOrientationCode(a.first);
-    int codeB = GetOrientationCode(b.first);
-
-    if (codeA == codeB) {
-        return CompareForOrientation(a.first, b.first, codeA);
     }
 
     return codeA < codeB;
@@ -437,7 +422,7 @@ static bool isEmptyString(const std::string& inString)
 /**
  * @brief Минимальный отступ слева
  */
-static double MinLeftMargin(const ParsedTextPlacementVectorWithParameters& inTextPlacements,
+static double MinLeftMargin(const ParsedTextPlacementVector& inTextPlacements,
                             const PDFRectangle& inMediaBox)
 {
     //
@@ -447,28 +432,28 @@ static double MinLeftMargin(const ParsedTextPlacementVectorWithParameters& inTex
     double minLeftMargin = inMediaBox.UpperRightX * scPageLeftPartCoefficient;
 
     auto it = inTextPlacements.begin();
-    double lineStart = it->first.globalBbox[0];
+    double lineStart = it->globalBbox[0];
 
-    bool startsWithNumber = IsNumber(it->first.text) ? true : false;
-    bool shouldSubtractNumberPosition = IsNumberAndDot(it->first.text) ? true : false;
+    bool startsWithNumber = IsNumber(it->text) ? true : false;
+    bool shouldSubtractNumberPosition = IsNumberAndDot(it->text) ? true : false;
 
-    ParsedTextPlacementWithParameters latestItem = *it;
+    ParsedTextPlacement latestItem = *it;
     ++it;
     for (; it != inTextPlacements.end(); ++it) {
         //
         // Итемы без текста пропусаем
         //
-        if (isEmptyString(it->first.text)) {
+        if (isEmptyString(it->text)) {
             continue;
         }
 
-        if (AreSameLine(latestItem.first, it->first)) {
+        if (AreSameLine(latestItem, *it)) {
             //
             // Если параграф начинается с номера и точки, то перезаписываем значение lineStart без
             // учета этого номера
             //
             if (shouldSubtractNumberPosition) {
-                lineStart = it->first.globalBbox[0];
+                lineStart = it->globalBbox[0];
                 shouldSubtractNumberPosition = false;
                 startsWithNumber = false;
             }
@@ -477,10 +462,10 @@ static double MinLeftMargin(const ParsedTextPlacementVectorWithParameters& inTex
             // Проверяем что параграф начинается с номера и точки (или двоеточия)
             //
             if (startsWithNumber) {
-                if (IsDotOrColon(it->first.text)) {
+                if (IsDotOrColon(it->text)) {
                     shouldSubtractNumberPosition = true;
                 } else {
-                    if (!IsNumber(it->first.text)) {
+                    if (!IsNumber(it->text)) {
                         startsWithNumber = false;
                     }
                 }
@@ -490,9 +475,9 @@ static double MinLeftMargin(const ParsedTextPlacementVectorWithParameters& inTex
                 minLeftMargin = lineStart;
             }
 
-            lineStart = it->first.globalBbox[0];
-            startsWithNumber = IsNumber(it->first.text) ? true : false;
-            shouldSubtractNumberPosition = IsNumberAndDot(it->first.text) ? true : false;
+            lineStart = it->globalBbox[0];
+            startsWithNumber = IsNumber(it->text) ? true : false;
+            shouldSubtractNumberPosition = IsNumberAndDot(it->text) ? true : false;
         }
         latestItem = *it;
     }
@@ -508,31 +493,31 @@ static double MinLeftMargin(const ParsedTextPlacementVectorWithParameters& inTex
  * @brief Минимальный отступ справа
  * @note Считается от левого края
  */
-static double MinRightMargin(const ParsedTextPlacementVectorWithParameters& inTextPlacements)
+static double MinRightMargin(const ParsedTextPlacementVector& inTextPlacements)
 {
     double minRightMargin = -1; // считается от левого края
     auto it = inTextPlacements.rbegin();
-    double lineEnd = it->first.globalBbox[2];
+    double lineEnd = it->globalBbox[2];
 
-    bool endsWithDot = IsDotOrColon(it->first.text) ? true : false;
-    bool endsWithNumberAndDot = IsNumberAndDot(it->first.text) ? true : false;
-    ParsedTextPlacementWithParameters latestItem = *it;
+    bool endsWithDot = IsDotOrColon(it->text) ? true : false;
+    bool endsWithNumberAndDot = IsNumberAndDot(it->text) ? true : false;
+    ParsedTextPlacement latestItem = *it;
     ++it;
     for (; it != inTextPlacements.rend(); ++it) {
         //
         // Итемы без текста пропусаем
         //
-        if (isEmptyString(it->first.text)) {
+        if (isEmptyString(it->text)) {
             continue;
         }
 
-        if (AreSameLine(latestItem.first, it->first)) {
+        if (AreSameLine(latestItem, *it)) {
             //
             // Если параграф заканчивается номером и точкой, то перезаписываем значение lineEnd без
             // учета этого номера
             //
-            if (endsWithNumberAndDot && !IsNumber(it->first.text)) {
-                lineEnd = it->first.globalBbox[2];
+            if (endsWithNumberAndDot && !IsNumber(it->text)) {
+                lineEnd = it->globalBbox[2];
                 endsWithDot = false;
                 endsWithNumberAndDot = false;
             }
@@ -541,7 +526,7 @@ static double MinRightMargin(const ParsedTextPlacementVectorWithParameters& inTe
             // Проверяем что параграф заканчивается номером и точкой
             //
             if (endsWithDot) {
-                if (IsNumber(it->first.text)) {
+                if (IsNumber(it->text)) {
                     endsWithNumberAndDot = true;
                 } else {
                     endsWithDot = false;
@@ -552,9 +537,9 @@ static double MinRightMargin(const ParsedTextPlacementVectorWithParameters& inTe
                 minRightMargin = lineEnd;
             }
 
-            lineEnd = it->first.globalBbox[2];
-            endsWithDot = IsDotOrColon(it->first.text) ? true : false;
-            endsWithNumberAndDot = IsNumberAndDot(it->first.text) ? true : false;
+            lineEnd = it->globalBbox[2];
+            endsWithDot = IsDotOrColon(it->text) ? true : false;
+            endsWithNumberAndDot = IsNumberAndDot(it->text) ? true : false;
         }
         latestItem = *it;
     }
@@ -650,17 +635,17 @@ static std::string InsertText(const QList<FormatString>& inLineText, QTextCursor
  * @brief Границы строки текста
  */
 static ParagraphBox::Line LineBox(
-    const ParsedTextPlacementVectorWithParameters::iterator inIterator,
-    const ParsedTextPlacementVectorWithParameters::iterator inEnd)
+    const ParsedTextPlacementVector::iterator inIterator,
+    const ParsedTextPlacementVector::iterator inEnd)
 {
-    ParsedTextPlacementVectorWithParameters::iterator iterator = inIterator;
-    ParsedTextPlacementWithParameters& firstItem = *iterator;
+    ParsedTextPlacementVector::iterator iterator = inIterator;
+    ParsedTextPlacement& firstItem = *iterator;
     ParagraphBox::Line line;
-    CopyBox(inIterator->first.globalBbox, line.box);
+    CopyBox(inIterator->globalBbox, line.box);
     ++iterator;
-    for (; iterator != inEnd && AreSameLine(firstItem.first, iterator->first); ++iterator) {
-        if (!isEmptyString(iterator->first.text)) {
-            UnionLeftBoxToRight(iterator->first.globalBbox, line.box);
+    for (; iterator != inEnd && AreSameLine(firstItem, *iterator); ++iterator) {
+        if (!isEmptyString(iterator->text)) {
+            UnionLeftBoxToRight(iterator->globalBbox, line.box);
         }
     }
     return line;
@@ -736,26 +721,26 @@ static double PageFooterLinePosition(const PDFRectangle& inMediaBox, const Lines
 /**
  * @brief Выходит ли итем за правую границу текста
  */
-static bool IsBeyondRightTextBorder(const ParsedTextPlacementWithParameters& inItem,
+static bool IsBeyondRightTextBorder(const ParsedTextPlacement& inItem,
                                     const PageParameters& inPageParameters)
 {
-    return inItem.first.globalBbox[2] > inPageParameters.minRightMargin;
+    return inItem.globalBbox[2] > inPageParameters.minRightMargin;
 }
 
 /**
  * @brief Является ли итем верхним или нижним колонтитулом
  */
-static bool IsPageHeaderOrFooter(const ParsedTextPlacementWithParameters& inItem,
+static bool IsPageHeaderOrFooter(const ParsedTextPlacement& inItem,
                                  const PageParameters& inPageParameters)
 {
-    const bool beyondBorders = inItem.first.globalBbox[1] > inPageParameters.headerLinePosition
-        || inItem.first.globalBbox[3] < inPageParameters.footerLinePosition;
+    const bool beyondBorders = inItem.globalBbox[1] > inPageParameters.headerLinePosition
+        || inItem.globalBbox[3] < inPageParameters.footerLinePosition;
 
     const bool smallTextOnEdge
-        = BoxHeight(inItem.first.globalBbox) < inPageParameters.generalTextSize
-        && (inItem.first.globalBbox[1]
+        = BoxHeight(inItem.globalBbox) < inPageParameters.generalTextSize
+        && (inItem.globalBbox[1]
                 > inPageParameters.mediaBox.UpperRightY * scPageTopPartCoefficient
-            || inItem.first.globalBbox[3]
+            || inItem.globalBbox[3]
                 < inPageParameters.mediaBox.UpperRightY * scPageBottomPartCoefficient);
 
     return beyondBorders || smallTextOnEdge;
@@ -764,29 +749,29 @@ static bool IsPageHeaderOrFooter(const ParsedTextPlacementWithParameters& inItem
 /**
  * @brief Имеет ли текстовый итем наклон
  */
-static bool HasRotation(const ParsedTextPlacementWithParameters& inItem)
+static bool HasRotation(const ParsedTextPlacement& inItem)
 {
     //
     // Угол наклона текста в PDF определяется как atan2(matrix[1], matrix[0])
     // или как atan2(-matrix[2], matrix[0]), если текст имеет искажение (skewing);
     // но чтобы сказать что он ненулевой, достаточно оценить первый параметр
     //
-    return abs(inItem.first.matrix[1]) > 0 || abs(inItem.first.matrix[2]) > 0;
+    return abs(inItem.matrix[1]) > 0 || abs(inItem.matrix[2]) > 0;
 }
 
 /**
  * @brief Является ли текстовый итем прозрачным
  */
-static bool IsTransparent(const ParsedTextPlacementWithParameters& inItem)
+static bool IsTransparent(const ParsedTextPlacement& inItem)
 {
-    return !isEmptyString(inItem.first.text) && inItem.second.constantAlpha > scConstantAlphaMin
-        && inItem.second.constantAlpha < scConstantAlphaMax;
+    return !isEmptyString(inItem.text) && inItem.parameters.constantAlpha > scConstantAlphaMin
+        && inItem.parameters.constantAlpha < scConstantAlphaMax;
 }
 
 /**
  * @brief Является ли текстовый итем частью сценария
  */
-static bool IsScript(const ParsedTextPlacementWithParameters& inItem,
+static bool IsScript(const ParsedTextPlacement& inItem,
                      const PageParameters& inPageParameters)
 {
     //
@@ -804,8 +789,8 @@ static bool IsScript(const ParsedTextPlacementWithParameters& inItem,
 /**
  * @brief Основной размер текста
  */
-static double GeneralTextSize(const ParsedTextPlacementVectorWithParameters::iterator& inIterator,
-                              const ParsedTextPlacementVectorWithParameters::iterator& inEnd)
+static double GeneralTextSize(const ParsedTextPlacementVector::iterator& inIterator,
+                              const ParsedTextPlacementVector::iterator& inEnd)
 {
     const auto compare = [](const TextItems& _lhs, const TextItems& _rhs) { return _lhs < _rhs; };
     std::set<TextItems, decltype(compare)> items(compare);
@@ -814,12 +799,12 @@ static double GeneralTextSize(const ParsedTextPlacementVectorWithParameters::ite
         //
         // Пропускаем пробельные символы и вотермарки (текст с наклоном или прозрачный)
         //
-        if (isEmptyString(iterator->first.text) || HasRotation(*iterator)
+        if (isEmptyString(iterator->text) || HasRotation(*iterator)
             || IsTransparent(*iterator)) {
             continue;
         }
-        double height = int(BoxHeight(iterator->first.globalBbox) * 100) / 100.0;
-        double width = BoxWidth(iterator->first.globalBbox);
+        double height = int(BoxHeight(iterator->globalBbox) * 100) / 100.0;
+        double width = BoxWidth(iterator->globalBbox);
         auto itItems = items.find(TextItems(height, 0, 0));
         if (itItems != items.end()) {
             TextItems newItems(height, itItems->length + width, itItems->count + 1);
@@ -943,16 +928,16 @@ void TextComposer::Reset() {
     buffer.str(scEmpty);
 }
 
-void TextComposer::ComposeDocument(const ParsedTextPlacementWithParametersList& inTextPlacements,
+void TextComposer::ComposeDocument(const ParsedTextPlacementList& inTextPlacements,
                                    const PDFRectangle& inMediaBox, const Lines& inPageLines,
                                    QTextCursor& inCursor)
 {
-    ParsedTextPlacementVectorWithParameters sortedTextCommands(inTextPlacements.begin(),
+    ParsedTextPlacementVector sortedTextCommands(inTextPlacements.begin(),
                                                                inTextPlacements.end());
     sort(sortedTextCommands.begin(), sortedTextCommands.end(),
-         CompareParsedTextPlacementWithParameters);
+         CompareParsedTextPlacement);
 
-    ParsedTextPlacementVectorWithParameters::iterator itCommands = sortedTextCommands.begin();
+    ParsedTextPlacementVector::iterator itCommands = sortedTextCommands.begin();
     if (itCommands == sortedTextCommands.end()) {
         return;
     }
@@ -978,8 +963,8 @@ void TextComposer::ComposeDocument(const ParsedTextPlacementWithParametersList& 
     //
     // ... номера в начале параграфа учитывать не будем
     //
-    bool startsWithNumber = IsNumber(itCommands->first.text) ? true : false;
-    bool shouldSubtractNumberPosition = IsNumberAndDot(itCommands->first.text) ? true : false;
+    bool startsWithNumber = IsNumber(itCommands->text) ? true : false;
+    bool shouldSubtractNumberPosition = IsNumberAndDot(itCommands->text) ? true : false;
 
     //
     // Пропускаем итемы, которые не относятся к тексту сценария
@@ -995,13 +980,13 @@ void TextComposer::ComposeDocument(const ParsedTextPlacementWithParametersList& 
         return;
     }
 
-    ParsedTextPlacementWithParameters& latestItem = *itCommands;
-    CopyBox(itCommands->first.globalBbox, lineBox);
+    ParsedTextPlacement& latestItem = *itCommands;
+    CopyBox(itCommands->globalBbox, lineBox);
 
     QList<FormatString> lineTextWithFormats;
-    lineTextWithFormats.append({ QString::fromStdString(itCommands->first.text),
-                                 itCommands->second.currentFormat,
-                                 BackgroundColor(inPageLines, itCommands->first.globalBbox) });
+    lineTextWithFormats.append({ QString::fromStdString(itCommands->text),
+                                 itCommands->parameters.format,
+                                 BackgroundColor(inPageLines, itCommands->globalBbox) });
 
     ++itCommands;
     for (; itCommands != sortedTextCommands.end(); ++itCommands) {
@@ -1016,13 +1001,13 @@ void TextComposer::ComposeDocument(const ParsedTextPlacementWithParametersList& 
         // Иногда встречаются мусорные (выходящие за границы строки) пробелы,
         // поэтому при переходе на новую строку будем их пропускать
         //
-        if (!AreSameLine(latestItem.first, itCommands->first)) {
+        if (!AreSameLine(latestItem, *itCommands)) {
             while (itCommands != sortedTextCommands.end()
-                   && isEmptyString(itCommands->first.text)) {
+                   && isEmptyString(itCommands->text)) {
                 //
                 // ... нормальные пробелы пишем
                 //
-                if (AreSameLine(latestItem.first, itCommands->first)) {
+                if (AreSameLine(latestItem, *itCommands)) {
                     lineTextWithFormats.append({ " " });
                 }
                 ++itCommands;
@@ -1043,13 +1028,13 @@ void TextComposer::ComposeDocument(const ParsedTextPlacementWithParametersList& 
             }
         }
 
-        if (AreSameLine(latestItem.first, itCommands->first)) {
+        if (AreSameLine(latestItem, *itCommands)) {
             if (addHorizontalSpaces) {
                 //
                 // NOTE: это работает не всегда!
                 //
                 unsigned long spaces
-                    = GuessHorizontalSpacingBetweenPlacements(latestItem.first, itCommands->first);
+                    = GuessHorizontalSpacingBetweenPlacements(latestItem, *itCommands);
                 if (spaces != 0) {
                     lineTextWithFormats.append({ " " });
                 }
@@ -1060,12 +1045,12 @@ void TextComposer::ComposeDocument(const ParsedTextPlacementWithParametersList& 
             // учета этого номера
             //
             if (shouldSubtractNumberPosition) {
-                CopyBox(itCommands->first.globalBbox, lineBox);
+                CopyBox(itCommands->globalBbox, lineBox);
                 //
                 // Если позиция предыдущего итема выходит за левую границу текста, то считаем, что
                 // это номер сцены и добавим пробел, т.к. иногда он не считывается
                 //
-                if (latestItem.first.globalBbox[0] < pageParameters.minLeftMargin) {
+                if (latestItem.globalBbox[0] < pageParameters.minLeftMargin) {
                     lineTextWithFormats.append({ " " });
                 } else {
                     //
@@ -1075,18 +1060,18 @@ void TextComposer::ComposeDocument(const ParsedTextPlacementWithParametersList& 
                 }
                 shouldSubtractNumberPosition = false;
                 startsWithNumber = false;
-            } else if (!isEmptyString(itCommands->first.text)) {
-                UnionLeftBoxToRight(itCommands->first.globalBbox, lineBox);
+            } else if (!isEmptyString(itCommands->text)) {
+                UnionLeftBoxToRight(itCommands->globalBbox, lineBox);
             }
 
             //
             // Проверяем что параграф начинается с номера и (точки или двоеточия)
             //
             if (startsWithNumber) {
-                if (IsDotOrColon(itCommands->first.text)) {
+                if (IsDotOrColon(itCommands->text)) {
                     shouldSubtractNumberPosition = true;
                 } else {
-                    if (!IsNumber(itCommands->first.text)) {
+                    if (!IsNumber(itCommands->text)) {
                         startsWithNumber = false;
                     }
                 }
@@ -1106,7 +1091,7 @@ void TextComposer::ComposeDocument(const ParsedTextPlacementWithParametersList& 
                 //
                 lineTextWithFormats.append(
                     { " ", TextFormat::regular,
-                      BackgroundColor(inPageLines, latestItem.first.globalBbox) });
+                      BackgroundColor(inPageLines, latestItem.globalBbox) });
 
                 //
                 // Костыль для импорта из КИТа - убираем дублирующиеся строки при переходе на новую
@@ -1145,15 +1130,15 @@ void TextComposer::ComposeDocument(const ParsedTextPlacementWithParametersList& 
                     inCursor.insertBlock();
                 }
             }
-            startsWithNumber = IsNumber(itCommands->first.text) ? true : false;
-            shouldSubtractNumberPosition = IsNumberAndDot(itCommands->first.text) ? true : false;
-            CopyBox(itCommands->first.globalBbox, lineBox);
+            startsWithNumber = IsNumber(itCommands->text) ? true : false;
+            shouldSubtractNumberPosition = IsNumberAndDot(itCommands->text) ? true : false;
+            CopyBox(itCommands->globalBbox, lineBox);
         }
 
-        lineTextWithFormats.append({ QString::fromStdString(itCommands->first.text),
-                                     itCommands->second.currentFormat,
-                                     BackgroundColor(inPageLines, itCommands->first.globalBbox) });
-        if (!isEmptyString(itCommands->first.text)) {
+        lineTextWithFormats.append({ QString::fromStdString(itCommands->text),
+                                     itCommands->parameters.format,
+                                     BackgroundColor(inPageLines, itCommands->globalBbox) });
+        if (!isEmptyString(itCommands->text)) {
             latestItem = *itCommands;
         }
     }

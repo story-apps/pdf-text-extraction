@@ -5,6 +5,20 @@
 #include <string>
 #include <list>
 
+
+enum TextFormat { regular, italic, bold, italicBold };
+
+struct TextParameters {
+    TextFormat format = TextFormat::regular;
+    double constantAlpha = 1;
+
+    void clear()
+    {
+        format = TextFormat::regular;
+        constantAlpha = 1;
+    }
+};
+
 struct ParsedTextPlacement {
     ParsedTextPlacement(
         const std::string& inText,
@@ -12,7 +26,8 @@ struct ParsedTextPlacement {
         const double (&inLocalBox)[4],
         const double (&inGlobalBox)[4],
         const double inSpaceWidth,
-        const double (&inGlobalSpaceWidth)[2]
+        const double (&inGlobalSpaceWidth)[2],
+        const TextParameters& inParameters = TextParameters()
     ) {
         text = inText;
         CopyMatrix(inMatrix, matrix);
@@ -20,6 +35,7 @@ struct ParsedTextPlacement {
         CopyBox(inGlobalBox, globalBbox);
         spaceWidth = inSpaceWidth;
         CopyVector(inGlobalSpaceWidth, globalSpaceWidth);
+        parameters = inParameters;
     }
 
     std::string text;
@@ -28,23 +44,8 @@ struct ParsedTextPlacement {
     double globalBbox[4];
     double spaceWidth;
     double globalSpaceWidth[2];
+    TextParameters parameters;
 };
 
 typedef std::list<ParsedTextPlacement> ParsedTextPlacementList;
-
-enum TextFormat { regular, italic, bold, italicBold };
-
-struct TextParameters {
-    bool shouldProcess = false;
-    TextFormat currentFormat = TextFormat::regular;
-    double constantAlpha = 1;
-
-    void clear()
-    {
-        currentFormat = TextFormat::regular;
-        constantAlpha = 1;
-    }
-};
-
-typedef std::list<std::pair<ParsedTextPlacement, TextParameters>> ParsedTextPlacementWithParametersList;
 

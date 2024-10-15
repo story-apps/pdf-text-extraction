@@ -35,8 +35,7 @@ class TextInterpeter {
 
         // forwarded by external party implementing IGraphicContentInterpreterHandler
         // with only what's relevant to text
-        bool OnTextElementComplete(const TextElement& inTextElement);
-        bool OnTextElementCompleteWithParameters(const TextElement& inTextElement, const TextParameters& inParameters);
+        bool OnTextElementComplete(const TextElement& inTextElement, const TextParameters& inParameters = TextParameters());
         bool OnResourcesRead(const Resources& inResources, IInterpreterContext* inContext);
 
         void ResetInterpretationState();

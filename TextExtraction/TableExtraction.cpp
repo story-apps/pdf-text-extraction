@@ -48,20 +48,8 @@ bool TableExtraction::OnParsedTextPlacementComplete(const ParsedTextPlacement& i
     return true;
 }
 
-bool TableExtraction::OnParsedTextPlacementCompleteWithParameters(
-    const ParsedTextPlacement& inParsedTextPlacement, const TextParameters& inParameters)
-{
-    textsForPagesWithParameters.back().push_back(
-        std::pair<ParsedTextPlacement, TextParameters>(inParsedTextPlacement, inParameters));
-    return true;
-}
-
-bool TableExtraction::OnTextElementComplete(const TextElement& inTextElement) {
-    return textInterpeter.OnTextElementComplete(inTextElement);
-}
-
-bool TableExtraction::OnTextElementCompleteWithParameters(const TextElement& inTextElement, const TextParameters& inParameters) {
-    return textInterpeter.OnTextElementCompleteWithParameters(inTextElement, inParameters);
+bool TableExtraction::OnTextElementComplete(const TextElement& inTextElement, const TextParameters& inParameters) {
+    return textInterpeter.OnTextElementComplete(inTextElement, inParameters);
 }
 
 bool TableExtraction::OnPathPainted(const PathElement& inPathElement) {
@@ -72,7 +60,7 @@ bool TableExtraction::OnResourcesRead(const Resources& inResources, IInterpreter
     return textInterpeter.OnResourcesRead(inResources, inContext);
 }
 
-EStatusCode TableExtraction::ExtractTablePlacements(PDFParser* inParser, long inStartPage, long inEndPage, bool inForQTextDocument) {
+EStatusCode TableExtraction::ExtractTablePlacements(PDFParser* inParser, long inStartPage, long inEndPage) {
     EStatusCode status = eSuccess;
     unsigned long start = (unsigned long)(inStartPage >= 0 ? inStartPage : (inParser->GetPagesCount() + inStartPage));
     unsigned long end = (unsigned long)(inEndPage >= 0 ? inEndPage :  (inParser->GetPagesCount() + inEndPage));
@@ -95,10 +83,9 @@ EStatusCode TableExtraction::ExtractTablePlacements(PDFParser* inParser, long in
 
         mediaBoxesForPages.push_back(pageInput.GetMediaBox());
         textsForPages.push_back(ParsedTextPlacementList());
-        textsForPagesWithParameters.push_back(ParsedTextPlacementWithParametersList());
         tableLinesForPages.push_back(Lines());
         // the interpreter will trigger the textInterpreter which in turn will trigger this object to collect text elements
-        interpreter.InterpretPageContents(inParser, pageObject.GetPtr(), this, inForQTextDocument);
+        interpreter.InterpretPageContents(inParser, pageObject.GetPtr(), this);
     }    
 
     textInterpeter.ResetInterpretationState();
@@ -108,7 +95,9 @@ EStatusCode TableExtraction::ExtractTablePlacements(PDFParser* inParser, long in
 
 static const string scEmpty = "";
 
-EStatusCode TableExtraction::ExtractTables(const std::string& inFilePath, long inStartPage, long inEndPage, bool inForQTextDocument) {
+EStatusCode TableExtraction::ExtractTables(const std::string& inFilePath, long inStartPage,
+                                           long inEndPage, bool inShouldComposeTables)
+{
     EStatusCode status = eSuccess;
     InputFile sourceFile;
 
@@ -139,11 +128,11 @@ EStatusCode TableExtraction::ExtractTables(const std::string& inFilePath, long i
             break;
         }
 
-        status = ExtractTablePlacements(&parser, inStartPage, inEndPage, inForQTextDocument);
+        status = ExtractTablePlacements(&parser, inStartPage, inEndPage);
         if(status != eSuccess)
             break;
 
-        if (!inForQTextDocument) {
+        if (inShouldComposeTables) {
             ComposeTables();
         }
     } while(false);
@@ -203,12 +192,12 @@ void TableExtraction::GetResultsAsDocument(QTextDocument& inDocument)
     cursor.beginEditBlock();
 
     TextComposer composer(0, TextComposer::eSpacingHorizontal);
-    ParsedTextPlacementWithParametersListList::iterator itTextsforPages
-        = textsForPagesWithParameters.begin();
+    ParsedTextPlacementListList::iterator itTextsforPages
+        = textsForPages.begin();
     LinesList::iterator itTablesLinesForPages = tableLinesForPages.begin();
     PDFRectangleList::iterator itMediaBoxForPages = mediaBoxesForPages.begin();
 
-    for (; itTextsforPages != textsForPagesWithParameters.end()
+    for (; itTextsforPages != textsForPages.end()
          && itTablesLinesForPages != tableLinesForPages.end()
          && itMediaBoxForPages != mediaBoxesForPages.end();
          ++itTextsforPages, ++itTablesLinesForPages, ++itMediaBoxForPages) {
