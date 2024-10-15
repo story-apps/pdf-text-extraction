@@ -315,21 +315,17 @@ bool GraphicContentInterpreter::TfCommand(const PDFObjectVector& inOperands, IIn
     CurrentTextState().fontSize = size;
 
     if (inContext) {
-        inContext->textParameters.format = TextFormat::regular;
+        inContext->textParameters.clear();
         if (inOperands.size() > 1) {
             const PDFName* currentFont = (PDFName*)inOperands.at(inOperands.size() - 2);
             const auto baseFont = inContext->GetParser()->GetBaseFontName(currentFont);
             if (baseFont.find("Bold") != std::string::npos
-                    || baseFont.find("bold") != std::string::npos) {
-                inContext->textParameters.format = TextFormat::bold;
+                || baseFont.find("bold") != std::string::npos) {
+                inContext->textParameters.formats.insert(TextFormat::Bold);
             }
             if (baseFont.find("Italic") != std::string::npos
-                    || baseFont.find("italic") != std::string::npos) {
-                if (inContext->textParameters.format == TextFormat::bold) {
-                    inContext->textParameters.format = TextFormat::italicBold;
-                } else {
-                    inContext->textParameters.format = TextFormat::italic;
-                }
+                || baseFont.find("italic") != std::string::npos) {
+                inContext->textParameters.formats.insert(TextFormat::Italic);
             }
         }
     }
@@ -376,11 +372,7 @@ bool GraphicContentInterpreter::EndTextElement(IInterpreterContext* inContext) {
     textGraphicStateStack.clear();
 
     // forward the new text element to the client
-    TextParameters parameters;
-    if (inContext) {
-        parameters = inContext->textParameters;
-        inContext->textParameters.clear();
-    }
+    TextParameters parameters = inContext ? inContext->textParameters : TextParameters{};
     return handler->OnTextElementComplete(el, parameters);
 }
 

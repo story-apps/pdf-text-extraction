@@ -30,25 +30,100 @@ static const double scConstantAlphaMin = 0.001;
 static const double scConstantAlphaMax = 0.999;
 static const double scColorMax = 0.99;
 
+/**
+ * @brief Цвет в модели RGB
+ */
 struct ColorRGB {
     double red = 1;
     double green = 1;
     double blue = 1;
 };
 
+/**
+ * @brief Является ли цвет белым
+ */
+static bool IsWhite(const double (&inColor)[3])
+{
+    return inColor[0] > scColorMax && inColor[1] > scColorMax && inColor[2] > scColorMax;
+}
+
+/**
+ * @brief Строка текста с форматами и цветом заливки
+ */
 struct FormatString {
-    FormatString(const QString& inText = QString(), TextFormat inFormat = TextFormat::regular,
-                 const ColorRGB &inColor = ColorRGB())
+    FormatString(const QString& inText,
+                 const std::set<TextFormat>& inFormats = std::set<TextFormat>(),
+                 const ColorRGB& inColor = ColorRGB())
         : text(inText)
-        , format(inFormat)
+        , formats(inFormats)
         , backgroundColor(inColor)
     {
     }
+    FormatString(const ParsedTextPlacement& inTextPlacements, const Lines& inPageLines);
+
     QString text;
-    TextFormat format;
+    std::set<TextFormat> formats;
     ColorRGB backgroundColor;
 };
 
+FormatString::FormatString(const ParsedTextPlacement& inTextPlacements, const Lines& inPageLines)
+    : text(QString::fromStdString(inTextPlacements.text))
+    , formats(inTextPlacements.parameters.formats)
+{
+    static constexpr int edgeCoef = 10;
+    static constexpr int zeroWidthCoef = 10;
+    static constexpr int minWidthCoef = 3;
+    static constexpr int thinCoef = 4;
+    static constexpr int textBottomCoef = 4;
+    static constexpr int underlineCoef = 5;
+
+    //
+    // Немного корректируем границы текста, чтобы не учитывались соседние линии,
+    // и учитывем случай, когда ширина текста равна нулю
+    //
+    const double textHeight = inTextPlacements.globalBbox[3] - inTextPlacements.globalBbox[1];
+    const double textLeftEdge = inTextPlacements.globalBbox[0] + textHeight / edgeCoef;
+    const double textRightEdge = (inTextPlacements.globalBbox[2] - inTextPlacements.globalBbox[0])
+            > textHeight / zeroWidthCoef
+        ? inTextPlacements.globalBbox[2] - textHeight / edgeCoef
+        : inTextPlacements.globalBbox[2] + textHeight / minWidthCoef;
+
+    for (const auto& itLines : inPageLines.horizontalLines) {
+        const bool lineAtTheTextHeight = itLines.globalPointOne[1] >= inTextPlacements.globalBbox[1]
+            && itLines.globalPointOne[1] <= inTextPlacements.globalBbox[3];
+        const bool lineAtTheTextDistance = itLines.globalPointOne[0] <= textLeftEdge
+            && itLines.globalPointTwo[0] >= textRightEdge;
+        const bool lineIsWide = itLines.effectiveLineWidth[0]
+                > (inTextPlacements.globalBbox[3] - inTextPlacements.globalBbox[1])
+            && itLines.effectiveLineWidth[1]
+                > (inTextPlacements.globalBbox[3] - inTextPlacements.globalBbox[1]);
+        const bool lineIsThin = itLines.effectiveLineWidth[0] < textHeight / 4
+            && itLines.effectiveLineWidth[1] < textHeight / thinCoef;
+        const bool lineAtTextBottom
+            = itLines.globalPointOne[1] - inTextPlacements.globalBbox[1] < textHeight / textBottomCoef;
+        const bool lineUnderText = itLines.globalPointOne[1] < inTextPlacements.globalBbox[1]
+            && itLines.globalPointOne[1] > inTextPlacements.globalBbox[1] - textHeight / underlineCoef;
+
+        if (!IsWhite(itLines.colorRGB)) {
+            if (lineIsWide && lineAtTheTextHeight && lineAtTheTextDistance) {
+                backgroundColor.red = itLines.colorRGB[0];
+                backgroundColor.green = itLines.colorRGB[1];
+                backgroundColor.blue = itLines.colorRGB[2];
+            } else if (lineIsThin && (lineAtTheTextHeight || lineUnderText)
+                       && lineAtTheTextDistance) {
+                if (lineAtTextBottom || lineUnderText) {
+                    formats.insert(TextFormat::Underline);
+                } else {
+                    formats.insert(TextFormat::Strikeout);
+                }
+            }
+        }
+    }
+}
+
+/**
+ * @brief Параметры страницы
+ */
 struct PageParameters {
     PDFRectangle mediaBox;
     double minLeftMargin = 0;
@@ -58,6 +133,9 @@ struct PageParameters {
     double generalTextSize = 0;
 };
 
+/**
+ * @brief Бокс параграфа с боксами строк
+ */
 struct ParagraphBox {
     double box[4];
     struct Line {
@@ -552,46 +630,6 @@ static double MinRightMargin(const ParsedTextPlacementVector& inTextPlacements)
 }
 
 /**
- * @brief Является ли цвет белым
- */
-static bool IsWhite(const double (&inColor)[3])
-{
-    return inColor[0] > scColorMax && inColor[1] > scColorMax && inColor[2] > scColorMax;
-}
-
-/**
- * @brief Цвет фоновой заливки текста
- */
-static ColorRGB BackgroundColor(const Lines& inPageLines, const double (&inTextBox)[4])
-{
-    //
-    // Немного скорректируем границы текста, чтобы не учитывались соседние линии
-    // и учитывем случай, когда ширина текста равна нулю
-    //
-    const double height = inTextBox[3] - inTextBox[1];
-    const double leftEdge = inTextBox[0] + height / 10;
-    const double rightEdge = (inTextBox[2] - inTextBox[0]) > height / 10
-        ? inTextBox[2] - height / 10
-        : inTextBox[2] + height / 3;
-
-    ColorRGB color;
-    for (const auto& itLines : inPageLines.horizontalLines) {
-        if (itLines.globalPointOne[1] > inTextBox[1] && itLines.globalPointOne[1] < inTextBox[3]
-            && itLines.globalPointOne[0] < leftEdge && itLines.globalPointTwo[0] > rightEdge
-            && !IsWhite(itLines.colorRGB)) {
-            if (itLines.effectiveLineWidth[0] > (inTextBox[3] - inTextBox[1])
-                && itLines.effectiveLineWidth[1] > (inTextBox[3] - inTextBox[1])) {
-                color.red = itLines.colorRGB[0];
-                color.green = itLines.colorRGB[1];
-                color.blue = itLines.colorRGB[2];
-            }
-            break;
-        }
-    }
-    return color;
-}
-
-/**
  * @brief Вставить текст с форматом
  * @return Записанный текст
  */
@@ -601,30 +639,26 @@ static std::string InsertText(const QList<FormatString>& inLineText, QTextCursor
     auto itText = inLineText.constBegin();
     for (; itText != inLineText.constEnd(); ++itText) {
         QTextCharFormat format;
-        switch (itText->format) {
-        case TextFormat::bold: {
+        if (itText->formats.find(TextFormat::Bold) != itText->formats.end()) {
             format.setFontWeight(QFont::Bold);
-            break;
         }
-        case TextFormat::italic: {
+        if (itText->formats.find(TextFormat::Italic) != itText->formats.end()) {
             format.setFontItalic(true);
-            break;
         }
-        case TextFormat::italicBold: {
-            format.setFontWeight(QFont::Bold);
-            format.setFontItalic(true);
-            break;
+        if (itText->formats.find(TextFormat::Underline) != itText->formats.end()) {
+            format.setFontUnderline(true);
         }
-        default: {
-            break;
+        if (itText->formats.find(TextFormat::Strikeout) != itText->formats.end()) {
+            format.setFontStrikeOut(true);
         }
-        }
+
         QColor color(itText->backgroundColor.red * 255, itText->backgroundColor.green * 255,
                      itText->backgroundColor.blue * 255);
         if (color.isValid() && color != Qt::white) {
             format.setForeground(Qt::black);
             format.setBackground(color);
         }
+
         inCursor.insertText(itText->text, format);
         text.append(itText->text.toStdString());
     }
@@ -932,10 +966,8 @@ void TextComposer::ComposeDocument(const ParsedTextPlacementList& inTextPlacemen
                                    const PDFRectangle& inMediaBox, const Lines& inPageLines,
                                    QTextCursor& inCursor)
 {
-    ParsedTextPlacementVector sortedTextCommands(inTextPlacements.begin(),
-                                                               inTextPlacements.end());
-    sort(sortedTextCommands.begin(), sortedTextCommands.end(),
-         CompareParsedTextPlacement);
+    ParsedTextPlacementVector sortedTextCommands(inTextPlacements.begin(), inTextPlacements.end());
+    sort(sortedTextCommands.begin(), sortedTextCommands.end(), CompareParsedTextPlacement);
 
     ParsedTextPlacementVector::iterator itCommands = sortedTextCommands.begin();
     if (itCommands == sortedTextCommands.end()) {
@@ -982,11 +1014,15 @@ void TextComposer::ComposeDocument(const ParsedTextPlacementList& inTextPlacemen
 
     ParsedTextPlacement& latestItem = *itCommands;
     CopyBox(itCommands->globalBbox, lineBox);
-
+    ColorRGB latestColor;
+    std::set<TextFormat> latestFormats;
     QList<FormatString> lineTextWithFormats;
-    lineTextWithFormats.append({ QString::fromStdString(itCommands->text),
-                                 itCommands->parameters.format,
-                                 BackgroundColor(inPageLines, itCommands->globalBbox) });
+    {
+        FormatString formatString(*itCommands, inPageLines);
+        lineTextWithFormats.append(formatString);
+        latestColor = formatString.backgroundColor;
+        latestFormats = formatString.formats;
+    }
 
     ++itCommands;
     for (; itCommands != sortedTextCommands.end(); ++itCommands) {
@@ -1002,13 +1038,12 @@ void TextComposer::ComposeDocument(const ParsedTextPlacementList& inTextPlacemen
         // поэтому при переходе на новую строку будем их пропускать
         //
         if (!AreSameLine(latestItem, *itCommands)) {
-            while (itCommands != sortedTextCommands.end()
-                   && isEmptyString(itCommands->text)) {
+            while (itCommands != sortedTextCommands.end() && isEmptyString(itCommands->text)) {
                 //
                 // ... нормальные пробелы пишем
                 //
                 if (AreSameLine(latestItem, *itCommands)) {
-                    lineTextWithFormats.append({ " " });
+                    lineTextWithFormats.append(FormatString(" "));
                 }
                 ++itCommands;
             }
@@ -1036,7 +1071,7 @@ void TextComposer::ComposeDocument(const ParsedTextPlacementList& inTextPlacemen
                 unsigned long spaces
                     = GuessHorizontalSpacingBetweenPlacements(latestItem, *itCommands);
                 if (spaces != 0) {
-                    lineTextWithFormats.append({ " " });
+                    lineTextWithFormats.append(FormatString(" "));
                 }
             }
 
@@ -1051,7 +1086,7 @@ void TextComposer::ComposeDocument(const ParsedTextPlacementList& inTextPlacemen
                 // это номер сцены и добавим пробел, т.к. иногда он не считывается
                 //
                 if (latestItem.globalBbox[0] < pageParameters.minLeftMargin) {
-                    lineTextWithFormats.append({ " " });
+                    lineTextWithFormats.append(FormatString(" "));
                 } else {
                     //
                     // ... если не выходит, считаем, что это номер реплики - его не пишем
@@ -1085,13 +1120,11 @@ void TextComposer::ComposeDocument(const ParsedTextPlacementList& inTextPlacemen
                 lineTextWithFormats.clear();
             } else {
                 //
-                // Добавляем к предыдущей строке пробел с тем же выделением цветом, что и у
-                // последнего записанного символа, чтобы многострочная редакторская заметка не
-                // разбивалась на несколько
+                // Добавляем к предыдущей строке пробел с теми же форматами и выделением цветом, что
+                // и у последнего записанного символа, чтобы многострочное форматирование не
+                // разбивалось на несколько
                 //
-                lineTextWithFormats.append(
-                    { " ", TextFormat::regular,
-                      BackgroundColor(inPageLines, latestItem.globalBbox) });
+                lineTextWithFormats.append(FormatString(" ", latestFormats, latestColor));
 
                 //
                 // Костыль для импорта из КИТа - убираем дублирующиеся строки при переходе на новую
@@ -1135,16 +1168,19 @@ void TextComposer::ComposeDocument(const ParsedTextPlacementList& inTextPlacemen
             CopyBox(itCommands->globalBbox, lineBox);
         }
 
-        lineTextWithFormats.append({ QString::fromStdString(itCommands->text),
-                                     itCommands->parameters.format,
-                                     BackgroundColor(inPageLines, itCommands->globalBbox) });
-        if (!isEmptyString(itCommands->text)) {
-            latestItem = *itCommands;
+        {
+            FormatString formatString(*itCommands, inPageLines);
+            lineTextWithFormats.append(formatString);
+            latestColor = formatString.backgroundColor;
+            latestFormats = formatString.formats;
+            if (!isEmptyString(itCommands->text)) {
+                latestItem = *itCommands;
+            }
         }
     }
     const std::string previousLineText = ExtractText(lineTextWithFormats);
     if (!IsNumberAndDot(previousLineText) && !IsNumber(previousLineText)) {
-        lineTextWithFormats.append({ " " });
+        lineTextWithFormats.append(FormatString(" "));
         lastWtrittenText = InsertText(lineTextWithFormats, inCursor);
     }
     AddLineToParagraphBox(lineBox, paragraph);
