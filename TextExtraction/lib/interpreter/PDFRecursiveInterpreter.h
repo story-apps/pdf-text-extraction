@@ -20,12 +20,6 @@ public:
     bool InterpretPageContents(
         PDFParser* inParser,
         PDFDictionary* inPage,
-        IPDFRecursiveInterpreterHandler* inHandler,
-        bool inForQTextDocumentt = false);
-
-    bool InterpretPageContentsWithFormats(
-        PDFParser* inParser,
-        PDFDictionary* inPage,
         IPDFRecursiveInterpreterHandler* inHandler);
 
     bool InterpretXObjectContents(
@@ -54,13 +48,6 @@ private:
         IPDFRecursiveInterpreterHandler* inHandler);       
 
     bool InterpretContentStream(
-        PDFParser* inParser,
-        PDFDictionary* inContentParent,
-        PDFObjectParser* inObjectParser,
-        InterpreterContext* inContext,
-        IPDFRecursiveInterpreterHandler* inHandler
-    );
-    bool InterpretContentStreamWithFormats(
         PDFParser* inParser,
         PDFDictionary* inContentParent,
         PDFObjectParser* inObjectParser,

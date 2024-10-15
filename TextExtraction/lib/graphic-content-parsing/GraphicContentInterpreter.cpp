@@ -29,24 +29,6 @@ GraphicContentInterpreter::~GraphicContentInterpreter(void) {
 bool GraphicContentInterpreter::InterpretPageContents(
     PDFParser* inParser,
     PDFDictionary* inPage,
-    IGraphicContentInterpreterHandler* inHandler,
-    bool inForQTextDocumentt) {
-    
-    if(!inHandler) // yeah im gonna require a handler here.
-        return true;
-
-    PDFRecursiveInterpreter interpreter;
-
-    handler = inHandler;
-    InitInterpretationState();
-    bool result = interpreter.InterpretPageContents(inParser, inPage, this, inForQTextDocumentt);
-    ResetInterpretationState();
-    return result;
-}
-
-bool GraphicContentInterpreter::InterpretPageContentsWithFormats(
-    PDFParser* inParser,
-    PDFDictionary* inPage,
     IGraphicContentInterpreterHandler* inHandler) {
 
     if(!inHandler) // yeah im gonna require a handler here.
@@ -56,7 +38,7 @@ bool GraphicContentInterpreter::InterpretPageContentsWithFormats(
 
     handler = inHandler;
     InitInterpretationState();
-    bool result = interpreter.InterpretPageContentsWithFormats(inParser, inPage, this);
+    bool result = interpreter.InterpretPageContents(inParser, inPage, this);
     ResetInterpretationState();
     return result;
 }
@@ -93,7 +75,7 @@ bool GraphicContentInterpreter::OnOperation(const std::string& inOperation,  con
     } else if(inOperation == "w") {
         return wCommand(inOperands);
     } else if(inOperation == "gs") {
-        return gsCommand(inOperands);
+        return gsCommand(inOperands, inContext);
     } else if(inOperation == "Tc") {
         // text state operators
         return TcCommand(inOperands);
@@ -106,32 +88,11 @@ bool GraphicContentInterpreter::OnOperation(const std::string& inOperation,  con
     } else if(inOperation == "Ts") {
         return TsCommand(inOperands);
     } else if(inOperation == "Tf") {
-        inContext->textParameters.currentFormat = TextFormat::regular;
-        if (inOperands.size() > 1) {
-            const PDFName* currentFont = (PDFName*)inOperands.at(inOperands.size() - 2);
-            const auto baseFont = inContext->GetParser()->GetBaseFontName(currentFont);
-            if (baseFont.find("Bold") != std::string::npos
-                || baseFont.find("bold") != std::string::npos) {
-                inContext->textParameters.currentFormat = TextFormat::bold;
-            }
-            if (baseFont.find("Italic") != std::string::npos
-                || baseFont.find("italic") != std::string::npos) {
-                if (inContext->textParameters.currentFormat == TextFormat::bold) {
-                    inContext->textParameters.currentFormat = TextFormat::italicBold;
-                } else {
-                    inContext->textParameters.currentFormat = TextFormat::italic;
-                }
-            }
-        }
-        return TfCommand(inOperands);
+        return TfCommand(inOperands, inContext);
     } else if(inOperation == "BT") {
         return BTCommand();
     } else if(inOperation == "ET") {
-        if (inContext->textParameters.shouldProcess) {
-            return ETCommandWithParameters(inContext->textParameters);
-        } else {
-            return ETCommand();
-        }
+         return ETCommand(inContext);
     } else if(inOperation == "Td") {
         // text positioining operators
         return TdCommand(inOperands);
@@ -259,7 +220,7 @@ TextGraphicState& GraphicContentInterpreter::CurrentTextState() {
     return graphicStateStack.back().textGraphicState;
 }
 
-bool GraphicContentInterpreter::gsCommand(const PDFObjectVector& inOperands) {
+bool GraphicContentInterpreter::gsCommand(const PDFObjectVector& inOperands, IInterpreterContext* inContext) {
     if(inOperands.size() < 1)
         return true; // too few params? ignore
 
@@ -277,6 +238,10 @@ bool GraphicContentInterpreter::gsCommand(const PDFObjectVector& inOperands) {
             CurrentGraphicState().lineWidth = it->second.lineWidth;
         }
     } // gstate will not be found if name is wrong, or that it didn't get collected cause didn't have interesting info for the task at hand
+
+    if (inContext) {
+        inContext->textParameters.constantAlpha = inContext->GetParser()->GetConstantAplha(gsName);
+    }
     return true;
 }
 
@@ -333,7 +298,7 @@ bool GraphicContentInterpreter::TsCommand(const PDFObjectVector& inOperands) {
     return true;
 }
 
-bool GraphicContentInterpreter::TfCommand(const PDFObjectVector& inOperands) {
+bool GraphicContentInterpreter::TfCommand(const PDFObjectVector& inOperands, IInterpreterContext* inContext) {
     if(inOperands.size() < 1)
         return true; // too few params? ignore
 
@@ -348,6 +313,27 @@ bool GraphicContentInterpreter::TfCommand(const PDFObjectVector& inOperands) {
         } // should i have a default font policy here?! 80-20 gal, 80-20.
     }
     CurrentTextState().fontSize = size;
+
+    if (inContext) {
+        inContext->textParameters.format = TextFormat::regular;
+        if (inOperands.size() > 1) {
+            const PDFName* currentFont = (PDFName*)inOperands.at(inOperands.size() - 2);
+            const auto baseFont = inContext->GetParser()->GetBaseFontName(currentFont);
+            if (baseFont.find("Bold") != std::string::npos
+                    || baseFont.find("bold") != std::string::npos) {
+                inContext->textParameters.format = TextFormat::bold;
+            }
+            if (baseFont.find("Italic") != std::string::npos
+                    || baseFont.find("italic") != std::string::npos) {
+                if (inContext->textParameters.format == TextFormat::bold) {
+                    inContext->textParameters.format = TextFormat::italicBold;
+                } else {
+                    inContext->textParameters.format = TextFormat::italic;
+                }
+            }
+        }
+    }
+
     return true;
 }
 
@@ -364,7 +350,7 @@ bool GraphicContentInterpreter::BTCommand() {
     return true;
 }
 
-bool GraphicContentInterpreter::EndTextElement() {
+bool GraphicContentInterpreter::EndTextElement(IInterpreterContext* inContext) {
     if(!isInTextElement) // ET without BT. ignore.
         return true;
 
@@ -390,44 +376,17 @@ bool GraphicContentInterpreter::EndTextElement() {
     textGraphicStateStack.clear();
 
     // forward the new text element to the client
-    return handler->OnTextElementComplete(el);
+    TextParameters parameters;
+    if (inContext) {
+        parameters = inContext->textParameters;
+        inContext->textParameters.clear();
+    }
+    return handler->OnTextElementComplete(el, parameters);
 }
 
-bool GraphicContentInterpreter::EndTextElementWithParameters(const TextParameters& inParameters) {
-    if(!isInTextElement) // ET without BT. ignore.
-        return true;
-
-    isInTextElement = false;
-
-    // copy text graphic state from text element graphic state to main graphic state
-    // for those operators that data is supposed to retain past text element boundaries
-    TextGraphicState& source = textGraphicStateStack.back();
-    TextGraphicState& target = graphicStateStack.back().textGraphicState;
-    target.charSpace = source.charSpace;
-    target.wordSpace = source.wordSpace;
-    target.scale = source.scale;
-    target.leading = source.leading;
-    target.rise = source.rise;
-    target.fontRef = source.fontRef;
-    target.fontSize = source.fontSize;
-
-    // prep result
-    TextElement el = {PlacedTextCommandList(currentTextElementCommands)};
-
-    // clear text element state
-    currentTextElementCommands.clear();
-    textGraphicStateStack.clear();
-
-    // forward the new text element to the client
-    return handler->OnTextElementCompleteWithParameters(el, inParameters);
-}
-
-bool GraphicContentInterpreter::ETCommand() {
-    return EndTextElement();
-}
-
-bool GraphicContentInterpreter::ETCommandWithParameters(const TextParameters& inParameters) {
-    return EndTextElementWithParameters(inParameters);
+bool GraphicContentInterpreter::ETCommand(IInterpreterContext* inContext) {
+    const bool shouldContinue = EndTextElement(inContext);
+    return shouldContinue;
 }
 
 void GraphicContentInterpreter::setTm(const double (&matrix)[6]) {

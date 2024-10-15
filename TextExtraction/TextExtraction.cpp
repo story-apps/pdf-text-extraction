@@ -28,8 +28,8 @@ bool TextExtraction::OnParsedTextPlacementComplete(const ParsedTextPlacement& in
 }
 
 
-bool TextExtraction::OnTextElementComplete(const TextElement& inTextElement) {
-    return textInterpeter.OnTextElementComplete(inTextElement);
+bool TextExtraction::OnTextElementComplete(const TextElement& inTextElement, const TextParameters& inParameters) {
+    return textInterpeter.OnTextElementComplete(inTextElement, inParameters);
 }
 
 bool TextExtraction::OnPathPainted(const PathElement& inPathElement) {

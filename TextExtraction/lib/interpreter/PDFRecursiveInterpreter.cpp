@@ -14,16 +14,6 @@
 #include <string>
 #include <algorithm>
 
-#define WRITE_STREAM_CONTENT 0 // _DEBUG
-#if WRITE_STREAM_CONTENT
-#include <QFile>
-#include "PDFBoolean.h"
-#include "PDFLiteralString.h"
-#include "PDFHexString.h"
-#include "PDFInteger.h"
-#include "PDFObjectParser.h"
-#endif
-
 using namespace std;
 using namespace PDFHummus;
 
@@ -297,216 +287,10 @@ bool PDFRecursiveInterpreter::InterpretContentStream(
     return shouldContinue;
 }
 
-bool PDFRecursiveInterpreter::InterpretContentStreamWithFormats(
-    PDFParser* inParser,
-    PDFDictionary* inContentParent,
-    PDFObjectParser* inObjectParser,
-    InterpreterContext* inContext,
-    IPDFRecursiveInterpreterHandler* inHandler
-) {
-    if(inObjectParser == NULL) // hmmm. something didn't work with creating an object parser. possibly an uknown
-                               // filter?
-        return true;
-
-    inContext->SetObjectParser(inObjectParser);
-
-    PDFObjectVector operandsStack;
-    bool shouldContinue = true;
-
-    PDFObject* anObject = inObjectParser->ParseNewObject();
-
-#if WRITE_STREAM_CONTENT
-    QFile file("stream_content.txt");
-    if (!file.open(QIODevice::WriteOnly | QIODevice::Append)) {
-        return false;
-    }
-    file.write("--- page begin ---\n");
-#endif
-
-    while(!!anObject && shouldContinue) {
-        if(anObject->GetType() == PDFObject::ePDFObjectSymbol) {
-            PDFSymbol* anOperand = (PDFSymbol*)anObject;
-#if WRITE_STREAM_CONTENT
-            file.write("- ");
-            file.write(anOperand->GetValue().c_str());
-            file.write("\n");
-#endif
-            if (anOperand->GetValue() == "gs") {
-                if (operandsStack.size() > 0) {
-                    const PDFName *graphicState = (PDFName*)operandsStack.at(operandsStack.size() - 1);
-                    inContext->textParameters.constantAlpha = inParser->GetConstantAplha(graphicState);
-                }
-            }
-
-            // Call handler for operation event
-            shouldContinue = inHandler->OnOperation(anOperand->GetValue(), operandsStack, inContext);
-
-            if (anOperand->GetValue() == "ET") {
-                inContext->textParameters.clear();
-            }
-
-            bool shouldRecurseIntoForm = false;
-            bool shouldSkipInlineImage = false;
-            string formName;
-
-            // Some control decisions for the interpreter on special kinds of operations
-            if(anOperand->GetValue() == scDo) {
-                // should recurse into form. save name for now
-                if(operandsStack.size() == 1 && operandsStack[0]->GetType() == PDFObject::ePDFObjectName) {
-                    formName = ((PDFName*)operandsStack[0])->GetValue();
-                    shouldRecurseIntoForm = true;
-                }
-            }
-
-            if(anOperand->GetValue() == scID && inHandler->ShouldSkipInlineImage()) {
-                // mark for skipping the content of this image
-                shouldSkipInlineImage = true;
-            }
-
-            // release operations and operands
-            anOperand->Release();
-            FreeObjectVector(operandsStack);
-
-            if(!shouldContinue)
-                break;
-
-            // now for implementing the special operations
-
-            if(shouldRecurseIntoForm) {
-                // k. user didn't cancel, let's dive into form
-                LongFilePositionType currentPosition = inParser->GetParserStream()->GetCurrentPosition();
-                PDFObjectCastPtr<PDFIndirectObjectReference> xobjectRef = inContext->FindResource(formName, "XObject");
-                ObjectIDType formObjectID = !xobjectRef ? 0 : xobjectRef->mObjectID;
-                if(!!mNestingContext) {
-                    ObjectIDTypeList::iterator itFindInStack = find(mNestingContext->nestedXObjects.begin(), mNestingContext->nestedXObjects.end(), formObjectID);
-                    if(itFindInStack != mNestingContext->nestedXObjects.end()) {
-                        // orcish mischief! looping. halt
-                        shouldContinue = false;
-                        break;
-                    }
-
-                    // add this form to the nesting stack
-                    mNestingContext->nestedXObjects.push_back(formObjectID);
-                }
-
-                PDFObjectCastPtr<PDFStreamInput> formObject(inParser->ParseNewObject(formObjectID));
-                if(!!formObject && IsForm(formObject.GetPtr())) {
-                    bool shouldRecurse = inHandler->OnXObjectDoStart(formName, formObjectID, formObject.GetPtr(), inParser);
-                    if(shouldRecurse) {
-                        PDFRecursiveInterpreter subordinateInterpreter;
-                        shouldContinue = subordinateInterpreter.InterpretXObjectContents(
-                            inParser,
-                            formObject.GetPtr(),
-                            inHandler
-                        );
-                    }
-                    inHandler->OnXObjectDoEnd(formName, formObjectID, formObject.GetPtr(), inParser);
-                }
-
-                if(!!mNestingContext) {
-                    mNestingContext->nestedXObjects.pop_back();
-                }
-
-
-                // restore stream position (hopefully this is enough to continue from where we were...)
-                inParser->GetParserStream()->SetPosition(currentPosition);
-            } else if(shouldSkipInlineImage) {
-                SkipInlinImageTillEI(inObjectParser);
-                // for completion, have onOperation for EI
-                shouldContinue = inHandler->OnOperation(scEI, PDFObjectVector(), inContext);
-            }
-        }
-        else {
-            operandsStack.push_back(anObject);
-
-#if WRITE_STREAM_CONTENT
-            switch (anObject->GetType()) {
-            case PDFObject::ePDFObjectBoolean: {
-                file.write("[PDFBoolean]");
-                PDFBoolean* anOperand = (PDFBoolean*)anObject;
-                file.write((QString::number(anOperand->GetValue())).toStdString().c_str());
-                break;
-            }
-            case PDFObject::ePDFObjectLiteralString: {
-                file.write("[PDFLiteralString]");
-                PDFLiteralString* anOperand = (PDFLiteralString*)anObject;
-                file.write(anOperand->GetValue().c_str());
-                break;
-            }
-            case PDFObject::ePDFObjectHexString: {
-                file.write("[PDFHexString]");
-                PDFHexString* anOperand = (PDFHexString*)anObject;
-                file.write(anOperand->GetValue().c_str());
-                break;
-            }
-            case PDFObject::ePDFObjectNull: {
-                file.write("-object_NULL-");
-                break;
-            }
-            case PDFObject::ePDFObjectName: {
-                file.write("[PDFName]");
-                PDFName* anOperand = (PDFName*)anObject;
-                file.write(anOperand->GetValue().c_str());
-                break;
-            }
-            case PDFObject::ePDFObjectInteger: {
-                file.write("[PDFInteger]");
-                PDFInteger* anOperand = (PDFInteger*)anObject;
-                file.write((QString::number(anOperand->GetValue())).toStdString().c_str());
-                break;
-            }
-            case PDFObject::ePDFObjectReal: {
-                file.write("[PDFReal]");
-                PDFReal* anOperand = (PDFReal*)anObject;
-                file.write((QString::number(anOperand->GetValue())).toStdString().c_str());
-                break;
-            }
-            case PDFObject::ePDFObjectArray: {
-                file.write("-object_Array-");
-                break;
-            }
-            case PDFObject::ePDFObjectDictionary: {
-                file.write("-object_Dictionary-");
-                break;
-            }
-            case PDFObject::ePDFObjectIndirectObjectReference: {
-                file.write("-object_IndirectReference-");
-                break;
-            }
-            case PDFObject::ePDFObjectStream: {
-                file.write("-object_Stream-");
-                break;
-            }
-            case PDFObject::ePDFObjectSymbol: {
-                file.write("[PDFSymbol]");
-                PDFSymbol* anOperand = (PDFSymbol*)anObject;
-                file.write(anOperand->GetValue().c_str());
-                break;
-            }
-            }
-            file.write(" ");
-#endif
-
-        }
-        anObject = inObjectParser->ParseNewObject();
-    }
-
-    FreeObjectVector(operandsStack);
-    delete inObjectParser; // The passed object parser is owned by this method, so dispose when done
-
-#if WRITE_STREAM_CONTENT
-    file.write("\n--- page end ---\n");
-    file.close();
-#endif
-
-    return shouldContinue;
-}
-
 bool PDFRecursiveInterpreter::InterpretPageContents(
     PDFParser* inParser,
     PDFDictionary* inPage,
-    IPDFRecursiveInterpreterHandler* inHandler,
-    bool inForQTextDocumentt) {
+    IPDFRecursiveInterpreterHandler* inHandler) {
 
     
     RefCountPtr<PDFObject> contents(inParser->QueryDictionaryObject(inPage, scContents));
@@ -517,44 +301,16 @@ bool PDFRecursiveInterpreter::InterpretPageContents(
     inHandler->OnResourcesRead(&context);
 
     if(contents->GetType() == PDFObject::ePDFObjectArray) {
-        if (inForQTextDocumentt) {
-            context.textParameters.shouldProcess = true;
-            return InterpretContentStreamWithFormats(inParser, inPage, inParser->StartReadingObjectsFromStreams((PDFArray*)contents.GetPtr()),&context, inHandler);
-        } else {
-            return InterpretContentStream(inParser, inPage, inParser->StartReadingObjectsFromStreams((PDFArray*)contents.GetPtr()),&context, inHandler);
-        }
+        return InterpretContentStream(
+            inParser, inPage,
+            inParser->StartReadingObjectsFromStreams((PDFArray*)contents.GetPtr()), &context,
+            inHandler);
     }
     else if(contents->GetType() == PDFObject::ePDFObjectStream) {
-        if (inForQTextDocumentt) {
-            context.textParameters.shouldProcess = true;
-            return InterpretContentStreamWithFormats(inParser, inPage, inParser->StartReadingObjectsFromStream((PDFStreamInput*)contents.GetPtr()),&context , inHandler);
-        } else {
-            return InterpretContentStream(inParser, inPage, inParser->StartReadingObjectsFromStream((PDFStreamInput*)contents.GetPtr()),&context , inHandler);
-        }
-    }
-
-    return true;
-}
-
-bool PDFRecursiveInterpreter::InterpretPageContentsWithFormats(
-    PDFParser* inParser,
-    PDFDictionary* inPage,
-    IPDFRecursiveInterpreterHandler* inHandler) {
-
-
-    RefCountPtr<PDFObject> contents(inParser->QueryDictionaryObject(inPage, scContents));
-    if(!contents)
-        return true;
-
-    InterpreterContext context(inParser, inPage);
-    inHandler->OnResourcesRead(&context);
-    context.textParameters.shouldProcess = true;
-
-    if(contents->GetType() == PDFObject::ePDFObjectArray) {
-        return InterpretContentStreamWithFormats(inParser, inPage, inParser->StartReadingObjectsFromStreams((PDFArray*)contents.GetPtr()),&context, inHandler);
-    }
-    else if(contents->GetType() == PDFObject::ePDFObjectStream) {
-        return InterpretContentStreamWithFormats(inParser, inPage, inParser->StartReadingObjectsFromStream((PDFStreamInput*)contents.GetPtr()),&context , inHandler);
+        return InterpretContentStream(
+            inParser, inPage,
+            inParser->StartReadingObjectsFromStream((PDFStreamInput*)contents.GetPtr()), &context,
+            inHandler);
     }
 
     return true;

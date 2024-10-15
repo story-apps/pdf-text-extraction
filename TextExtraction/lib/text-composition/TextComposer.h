@@ -27,7 +27,7 @@ class TextComposer {
 
 
         void ComposeText(const ParsedTextPlacementList& inTextPlacements, std::ostream& outStream);
-        void ComposeDocument(const ParsedTextPlacementWithParametersList& inTextPlacements, const PDFRectangle& inMediaBox,
+        void ComposeDocument(const ParsedTextPlacementList& inTextPlacements, const PDFRectangle& inMediaBox,
                              const Lines& inPageLines, QTextCursor& inCursor);
 
     private:

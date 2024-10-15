@@ -24,7 +24,6 @@ class IByteReaderWithPosition;
 #include <list>
 
 typedef std::list<ParsedTextPlacementList> ParsedTextPlacementListList;
-typedef std::list<ParsedTextPlacementWithParametersList> ParsedTextPlacementWithParametersListList;
 typedef std::list<TableList> TableListList;
 typedef std::list<ExtractionWarning> ExtractionWarningList;
 typedef std::list<PDFRectangle> PDFRectangleList;
@@ -35,7 +34,9 @@ class TableExtraction : public ITextInterpreterHandler, IGraphicContentInterpret
         TableExtraction();
         virtual ~TableExtraction();
 
-        PDFHummus::EStatusCode ExtractTables(const std::string& inFilePath, long inStartPage=0, long inEndPage=-1, bool inForQTextDocumentt = false);
+        PDFHummus::EStatusCode ExtractTables(const std::string& inFilePath, long inStartPage = 0,
+                                             long inEndPage = -1,
+                                             bool inShouldComposeTables = true);
         PDFHummus::EStatusCode ExtractTables(PDFParser* inParser, long inStartPage=0, long inEndPage=-1);
         PDFHummus::EStatusCode ExtractTables(IByteReaderWithPosition* inStream, long inStartPage=0, long inEndPage=-1);
 
@@ -45,15 +46,12 @@ class TableExtraction : public ITextInterpreterHandler, IGraphicContentInterpret
         TableListList tablesForPages;
 
         // IGraphicContentInterpreterHandler implementation
-        virtual bool OnTextElementComplete(const TextElement& inTextElement);
-        virtual bool OnTextElementCompleteWithParameters(const TextElement& inTextElement, const TextParameters& inParameters);
+        virtual bool OnTextElementComplete(const TextElement& inTextElement, const TextParameters& inParameters = TextParameters());
         virtual bool OnPathPainted(const PathElement& inPathElement);
         virtual bool OnResourcesRead(const Resources& inResources, IInterpreterContext* inContext);
 
         // ITextInterpreterHandler implementation OnParsedTextPlacementCompleteWithFormat
         virtual bool OnParsedTextPlacementComplete(const ParsedTextPlacement& inParsedTextPlacement);
-        virtual bool OnParsedTextPlacementCompleteWithParameters(
-            const ParsedTextPlacement& inParsedTextPlacement, const TextParameters& inParameters);
 
         // ITableLineInterpreterHandler implementation
         virtual bool OnParsedHorizontalLinePlacementComplete(const ParsedLinePlacement& inParsedLine); 
@@ -68,12 +66,11 @@ class TableExtraction : public ITextInterpreterHandler, IGraphicContentInterpret
         TableLineInterpreter tableLineInterpreter;
 
         ParsedTextPlacementListList textsForPages;
-        ParsedTextPlacementWithParametersListList textsForPagesWithParameters;
         LinesList tableLinesForPages;
         PDFRectangleList mediaBoxesForPages;
 
 
-        PDFHummus::EStatusCode ExtractTablePlacements(PDFParser* inParser, long inStartPage, long inEndPage, bool inForQTextDocumentt = false);
+        PDFHummus::EStatusCode ExtractTablePlacements(PDFParser* inParser, long inStartPage, long inEndPage);
         void ComposeTables();
         void ClearState();
         
