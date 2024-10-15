@@ -4,17 +4,18 @@
 
 #include <string>
 #include <list>
+#include <set>
 
 
-enum TextFormat { regular, italic, bold, italicBold };
+enum TextFormat { Italic, Bold, Underline, Strikeout };
 
 struct TextParameters {
-    TextFormat format = TextFormat::regular;
+    std::set<TextFormat> formats;
     double constantAlpha = 1;
 
     void clear()
     {
-        format = TextFormat::regular;
+        formats.clear();
         constantAlpha = 1;
     }
 };
