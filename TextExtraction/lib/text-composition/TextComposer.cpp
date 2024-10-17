@@ -22,13 +22,12 @@ typedef std::vector<ParsedTextPlacement> ParsedTextPlacementVector;
 static const string scEmpty = "";
 static const char scSpace = ' ';
 static const string scCRLN = "\r\n";
-static const double scPageTopPartCoefficient = 9 / 10.0;
-static const double scPageBottomPartCoefficient = 1 / 10.0;
-static const double scPageLeftPartCoefficient = 1 / 5.0;
-static const double scPageRightPartCoefficient = 4 / 5.0;
-static const double scConstantAlphaMin = 0.001;
-static const double scConstantAlphaMax = 0.999;
-static const double scColorMax = 0.99;
+static constexpr double scPageTopPartCoefficient = 9 / 10.0;
+static constexpr double scPageBottomPartCoefficient = 1 / 10.0;
+static constexpr double scPageLeftPartCoefficient = 1 / 5.0;
+static constexpr double scPageRightPartCoefficient = 4 / 5.0;
+static constexpr double scDoubleZero = 0.001;
+static constexpr double scDoubleOne = 0.999;
 
 /**
  * @brief Цвет в модели RGB
@@ -44,7 +43,7 @@ struct ColorRGB {
  */
 static bool IsWhite(const double (&inColor)[3])
 {
-    return inColor[0] > scColorMax && inColor[1] > scColorMax && inColor[2] > scColorMax;
+    return inColor[0] > scDoubleOne && inColor[1] > scDoubleOne && inColor[2] > scDoubleOne;
 }
 
 /**
@@ -798,8 +797,8 @@ static bool HasRotation(const ParsedTextPlacement& inItem)
  */
 static bool IsTransparent(const ParsedTextPlacement& inItem)
 {
-    return !isEmptyString(inItem.text) && inItem.parameters.constantAlpha > scConstantAlphaMin
-        && inItem.parameters.constantAlpha < scConstantAlphaMax;
+    return !isEmptyString(inItem.text) && inItem.parameters.constantAlpha > scDoubleZero
+        && inItem.parameters.constantAlpha < scDoubleOne;
 }
 
 /**
@@ -876,6 +875,34 @@ static double GeneralTextSize(const ParsedTextPlacementVector::iterator& inItera
     }
 
     return generalItems->height;
+}
+
+/**
+ * @brief Продолжается ли предыдущий параграф
+ */
+static bool IsParagraphContinued(const std::string& inLastWrittenText,
+                                 const double (&inLastWrittenTextBox)[4],
+                                 const ParsedTextPlacement& inCurrentTextPlacemen)
+{
+    if (inLastWrittenText.empty()
+        || (inLastWrittenTextBox[0] < scDoubleZero && inLastWrittenTextBox[1] < scDoubleZero
+            && inLastWrittenTextBox[2] < scDoubleZero && inLastWrittenTextBox[3] < scDoubleZero)) {
+        return false;
+    }
+
+    static constexpr int sameEdgeCoef = 10;
+    const double textHeight
+        = inCurrentTextPlacemen.globalBbox[3] - inCurrentTextPlacemen.globalBbox[1];
+
+    const bool sameLeftEdge
+        = std::abs(inLastWrittenTextBox[0] - inCurrentTextPlacemen.globalBbox[0])
+        < textHeight / sameEdgeCoef;
+    const bool lastLineEndsWithDot
+        = QString::fromStdString(inLastWrittenText).simplified().endsWith(".");
+    const bool firstCharIsLowercase
+        = QString::fromStdString(inCurrentTextPlacemen.text).left(1).isLower();
+
+    return sameLeftEdge && !lastLineEndsWithDot && firstCharIsLowercase;
 }
 
 void TextComposer::MergeLineStreamToResultString(const stringstream& inStream, int bidiFlag,
@@ -983,6 +1010,8 @@ void TextComposer::ComposeDocument(const ParsedTextPlacementList& inTextPlacemen
     pageParameters.generalTextSize = GeneralTextSize(itCommands, sortedTextCommands.end());
 
     bool firstLineOnPage = true;
+    bool firstWritableItem = true;
+    bool isParagraphContinued = false;
     double lineBox[4];
     bool addHorizontalSpaces = spacingFlag & TextComposer::eSpacingHorizontal;
 
@@ -991,7 +1020,7 @@ void TextComposer::ComposeDocument(const ParsedTextPlacementList& inTextPlacemen
     //
     double previousParagraphBottom = inMediaBox.UpperRightY;
     ParagraphBox paragraph = { { 0, 0, 0, 0 }, {} };
-    inCursor.insertBlock();
+
     //
     // ... номера в начале параграфа учитывать не будем
     //
@@ -1113,10 +1142,22 @@ void TextComposer::ComposeDocument(const ParsedTextPlacementList& inTextPlacemen
             }
         } else {
             //
+            // Для первого записываемого итема вставляем блок в документ, если он не является
+            // продолжением предыдущей страницы
+            //
+            if (firstWritableItem) {
+                isParagraphContinued
+                    = IsParagraphContinued(lastWrittenText, lastWrittenTextBox, *itCommands);
+                if (!isParagraphContinued) {
+                    inCursor.insertBlock();
+                }
+                firstWritableItem = false;
+            }
+            //
             // Если предыдущая строка состоит только из номера, то её пропускаем
             //
-            const std::string previousLineText = ExtractText(lineTextWithFormats);
-            if (IsNumberAndDot(previousLineText) || IsNumber(previousLineText)) {
+            if (const auto previousLineText = ExtractText(lineTextWithFormats);
+                IsNumberAndDot(previousLineText) || IsNumber(previousLineText)) {
                 lineTextWithFormats.clear();
             } else {
                 //
@@ -1132,9 +1173,9 @@ void TextComposer::ComposeDocument(const ParsedTextPlacementList& inTextPlacemen
                 //
                 if (firstLineOnPage) {
                     firstLineOnPage = false;
-                    const int countToRemove = QString::fromStdString(lastWtrittenText).size();
+                    const int countToRemove = QString::fromStdString(lastWrittenText).size();
                     if (countToRemove > 0
-                        && ExtractText(lineTextWithFormats).find(lastWtrittenText)
+                        && ExtractText(lineTextWithFormats).find(lastWrittenText)
                             != std::string::npos) {
                         inCursor.movePosition(QTextCursor::PreviousBlock);
                         inCursor.movePosition(QTextCursor::EndOfBlock);
@@ -1142,11 +1183,11 @@ void TextComposer::ComposeDocument(const ParsedTextPlacementList& inTextPlacemen
                                               countToRemove);
                         inCursor.removeSelectedText();
                         inCursor.movePosition(QTextCursor::End);
-                        inCursor.insertBlock();
                     }
                 }
 
-                lastWtrittenText = InsertText(lineTextWithFormats, inCursor);
+                lastWrittenText = InsertText(lineTextWithFormats, inCursor);
+                CopyBox(lineBox, lastWrittenTextBox);
                 AddLineToParagraphBox(lineBox, paragraph);
                 lineTextWithFormats.clear();
 
@@ -1156,8 +1197,11 @@ void TextComposer::ComposeDocument(const ParsedTextPlacementList& inTextPlacemen
                 ParagraphBox::Line newLine = LineBox(itCommands, sortedTextCommands.end());
 
                 if (IsNewParagraph(lineBox, newLine.box, pageParameters)) {
-                    SetFormatToPreviousBlock(paragraph, pageParameters, previousParagraphBottom,
-                                             inCursor);
+                    if (!isParagraphContinued) {
+                        SetFormatToPreviousBlock(paragraph, pageParameters, previousParagraphBottom,
+                                                 inCursor);
+                    }
+                    isParagraphContinued = false;
                     previousParagraphBottom = paragraph.box[1];
                     paragraph.clear();
                     inCursor.insertBlock();
@@ -1178,11 +1222,13 @@ void TextComposer::ComposeDocument(const ParsedTextPlacementList& inTextPlacemen
             }
         }
     }
-    const std::string previousLineText = ExtractText(lineTextWithFormats);
-    if (!IsNumberAndDot(previousLineText) && !IsNumber(previousLineText)) {
+
+    if (const auto previousLineText = ExtractText(lineTextWithFormats);
+        !IsNumberAndDot(previousLineText) && !IsNumber(previousLineText)) {
         lineTextWithFormats.append(FormatString(" "));
-        lastWtrittenText = InsertText(lineTextWithFormats, inCursor);
+        lastWrittenText = InsertText(lineTextWithFormats, inCursor);
     }
+    CopyBox(lineBox, lastWrittenTextBox);
     AddLineToParagraphBox(lineBox, paragraph);
     SetFormatToPreviousBlock(paragraph, pageParameters, previousParagraphBottom, inCursor);
 }
