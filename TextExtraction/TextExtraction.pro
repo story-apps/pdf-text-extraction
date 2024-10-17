@@ -1,7 +1,7 @@
 TARGET   = TextExtraction
 TEMPLATE = lib
 
-CONFIG += staticlib
+CONFIG += staticlib c++1z
 
 LIBSDIR = ../../../_build/libs
 

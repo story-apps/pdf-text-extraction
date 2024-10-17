@@ -33,7 +33,8 @@ class TextComposer {
     private:
         int bidiFlag;
         ESpacing spacingFlag;
-        std::string lastWtrittenText;
+        std::string lastWrittenText;
+        double lastWrittenTextBox[4] = {};
 
     void MergeLineStreamToResultString(
         const std::stringstream& inStream, 
