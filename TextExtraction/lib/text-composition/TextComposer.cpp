@@ -307,6 +307,25 @@ unsigned long GuessHorizontalSpacingBetweenPlacements(const ParsedTextPlacement&
 }
 
 /**
+ * @brief Добавить границы итема к границам строки
+ */
+static void AddItemToLineBox(const double (&inItemBox)[4], double (&refLinetBox)[4])
+{
+    //
+    // Если левая граница итема совпадает с левой границей строки (что, по идее, не соответствует
+    // действительности), то прибавим ширину итема к текущей границе строки
+    //
+    if (inItemBox[0] - refLinetBox[0] < scDoubleZero) {
+        refLinetBox[2] += BoxWidth(inItemBox);
+    } else {
+        //
+        // ... иначе посчитаем полностью
+        //
+        UnionLeftBoxToRight(inItemBox, refLinetBox);
+    }
+}
+
+/**
  * @brief Добавить границы строки к границам параграфа
  */
 static void AddLineToParagraphBox(const double (&inNewLineBox)[4], ParagraphBox& outParagraph)
@@ -678,7 +697,7 @@ static ParagraphBox::Line LineBox(
     ++iterator;
     for (; iterator != inEnd && AreSameLine(firstItem, *iterator); ++iterator) {
         if (!isEmptyString(iterator->text)) {
-            UnionLeftBoxToRight(iterator->globalBbox, line.box);
+            AddItemToLineBox(iterator->globalBbox, line.box);
         }
     }
     return line;
@@ -1125,7 +1144,7 @@ void TextComposer::ComposeDocument(const ParsedTextPlacementList& inTextPlacemen
                 shouldSubtractNumberPosition = false;
                 startsWithNumber = false;
             } else if (!isEmptyString(itCommands->text)) {
-                UnionLeftBoxToRight(itCommands->globalBbox, lineBox);
+                AddItemToLineBox(itCommands->globalBbox, lineBox);
             }
 
             //
