@@ -409,7 +409,7 @@ static void SetFormatToPreviousBlock(const ParagraphBox& inParagraph,
     // Считаем как количество строк, которые могут поместиться между параграфами
     //
     double textHeight = BoxHeight(inParagraph.lines[0].box);
-    int topMargin = (inPreviousParagraphBottom - inParagraph.box[3]) / textHeight;
+    int topMargin = round((inPreviousParagraphBottom - inParagraph.box[3]) / textHeight);
     format.setTopMargin(topMargin);
 
     //
@@ -530,8 +530,8 @@ static double MinLeftMargin(const ParsedTextPlacementVector& inTextPlacements,
     auto it = inTextPlacements.begin();
     double lineStart = it->globalBbox[0];
 
-    bool startsWithNumber = IsNumber(it->text) ? true : false;
-    bool shouldSubtractNumberPosition = IsNumberAndDot(it->text) ? true : false;
+    bool startsWithNumber = IsNumber(it->text);
+    bool shouldSubtractNumberPosition = IsNumberAndDot(it->text);
 
     ParsedTextPlacement latestItem = *it;
     ++it;
@@ -572,8 +572,8 @@ static double MinLeftMargin(const ParsedTextPlacementVector& inTextPlacements,
             }
 
             lineStart = it->globalBbox[0];
-            startsWithNumber = IsNumber(it->text) ? true : false;
-            shouldSubtractNumberPosition = IsNumberAndDot(it->text) ? true : false;
+            startsWithNumber = IsNumber(it->text);
+            shouldSubtractNumberPosition = IsNumberAndDot(it->text);
         }
         latestItem = *it;
     }
@@ -595,8 +595,8 @@ static double MinRightMargin(const ParsedTextPlacementVector& inTextPlacements)
     auto it = inTextPlacements.rbegin();
     double lineEnd = it->globalBbox[2];
 
-    bool endsWithDot = IsDotOrColon(it->text) ? true : false;
-    bool endsWithNumberAndDot = IsNumberAndDot(it->text) ? true : false;
+    bool endsWithDot = IsDotOrColon(it->text);
+    bool endsWithNumberAndDot = IsNumberAndDot(it->text);
     ParsedTextPlacement latestItem = *it;
     ++it;
     for (; it != inTextPlacements.rend(); ++it) {
@@ -629,13 +629,16 @@ static double MinRightMargin(const ParsedTextPlacementVector& inTextPlacements)
                 }
             }
         } else {
-            if (lineEnd > minRightMargin || minRightMargin < 0) {
+            if (lineEnd > minRightMargin) {
                 minRightMargin = lineEnd;
             }
 
-            lineEnd = it->globalBbox[2];
-            endsWithDot = IsDotOrColon(it->text) ? true : false;
-            endsWithNumberAndDot = IsNumberAndDot(it->text) ? true : false;
+            //
+            // Если строка заканчивается номером или номером с точкой, то их границы не учитываем
+            //
+            lineEnd = IsNumber(it->text) || IsNumberAndDot(it->text) ? -1 : it->globalBbox[2];
+            endsWithDot = IsDotOrColon(it->text);
+            endsWithNumberAndDot = IsNumberAndDot(it->text);
         }
         latestItem = *it;
     }
@@ -1043,8 +1046,8 @@ void TextComposer::ComposeDocument(const ParsedTextPlacementList& inTextPlacemen
     //
     // ... номера в начале параграфа учитывать не будем
     //
-    bool startsWithNumber = IsNumber(itCommands->text) ? true : false;
-    bool shouldSubtractNumberPosition = IsNumberAndDot(itCommands->text) ? true : false;
+    bool startsWithNumber = IsNumber(itCommands->text);
+    bool shouldSubtractNumberPosition = IsNumberAndDot(itCommands->text);
 
     //
     // Пропускаем итемы, которые не относятся к тексту сценария
@@ -1226,8 +1229,8 @@ void TextComposer::ComposeDocument(const ParsedTextPlacementList& inTextPlacemen
                     inCursor.insertBlock();
                 }
             }
-            startsWithNumber = IsNumber(itCommands->text) ? true : false;
-            shouldSubtractNumberPosition = IsNumberAndDot(itCommands->text) ? true : false;
+            startsWithNumber = IsNumber(itCommands->text);
+            shouldSubtractNumberPosition = IsNumberAndDot(itCommands->text);
             CopyBox(itCommands->globalBbox, lineBox);
         }
 
