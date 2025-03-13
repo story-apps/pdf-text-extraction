@@ -303,7 +303,7 @@ unsigned long GuessHorizontalSpacingBetweenPlacements(const ParsedTextPlacement&
     if(spaceWidth == 0)
         return 0; // protect from 0 errors
 
-    return (unsigned long)floor(distance/spaceWidth);
+    return (unsigned long)round(distance/spaceWidth);
 }
 
 /**
