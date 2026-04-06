@@ -37,6 +37,7 @@ public:
 
     FontDecoderResult Translate(const ByteList& inAsBytes);
     DispositionResultList ComputeDisplacements(const ByteList& inAsBytes);
+    const std::string& baseFontStyleSource() const;
 
     double ascent;
     double descent;
@@ -52,6 +53,8 @@ private:
     double monospaceWidth;
     ULongToDoubleMap widths;
     double defaultWidth;
+
+    std::string baseFontStyleSource_;
 
     void ParseFontData(PDFParser* inParser, PDFDictionary* inFont);
     void ParseToUnicodeMap(PDFParser* inParser, PDFStreamInput* inUnicodeMapStream);
