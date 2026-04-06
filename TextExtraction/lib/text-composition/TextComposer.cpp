@@ -5,6 +5,7 @@
 #include "../table-composition/Lines.h"
 
 #include <algorithm>
+#include <sstream>
 #include <vector>
 #include <math.h>
 #include <set>
@@ -26,6 +27,7 @@ static constexpr double scPageTopPartCoefficient = 9 / 10.0;
 static constexpr double scPageBottomPartCoefficient = 1 / 10.0;
 static constexpr double scPageLeftPartCoefficient = 1 / 5.0;
 static constexpr double scPageRightPartCoefficient = 4 / 5.0;
+static constexpr double scStrikeIgnoreTopCoefficient = 1 / 5.0;
 static constexpr double scDoubleZero = 0.001;
 static constexpr double scDoubleOne = 0.999;
 
@@ -113,7 +115,15 @@ FormatString::FormatString(const ParsedTextPlacement& inTextPlacements, const Li
                 if (lineAtTextBottom || lineUnderText) {
                     formats.insert(TextFormat::Underline);
                 } else {
-                    formats.insert(TextFormat::Strikeout);
+                    //
+                    // Пропускаем strikeout, если линия у верхней границы текста, 
+                    // т.к. это может быть подчеркиванием текста выше
+                    //
+                    const double strikeIgnoreAboveY = inTextPlacements.globalBbox[3]
+                        - textHeight * scStrikeIgnoreTopCoefficient;
+                    if (itLines.globalPointOne[1] <= strikeIgnoreAboveY) {
+                        formats.insert(TextFormat::Strikeout);
+                    }
                 }
             }
         }
@@ -1103,6 +1113,16 @@ void TextComposer::ComposeDocument(const ParsedTextPlacementList& inTextPlacemen
         }
 
         if (AreSameLine(latestItem, *itCommands)) {
+            //
+            // Пропускаем дефисы, чей bbox полностью внутри bbox предыдущего placement'а
+            //
+            if (itCommands->globalBbox[2] <= latestItem.globalBbox[2]
+                && itCommands->globalBbox[0] >= latestItem.globalBbox[0]
+                && (itCommands->text == "-" || itCommands->text == "\xe2\x80\x93"
+                    || itCommands->text == "\xe2\x80\x94")) {
+                continue;
+            }
+
             if (addHorizontalSpaces) {
                 //
                 // NOTE: это работает не всегда!
