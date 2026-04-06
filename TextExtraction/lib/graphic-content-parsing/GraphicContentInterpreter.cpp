@@ -458,6 +458,7 @@ void GraphicContentInterpreter::RecordTextPlacement(const PlacedTextCommandArgum
         TextGraphicState(CurrentTextState())
     };
     currentTextElementCommands.push_back(el);
+    CurrentTextState().tmDirty = false;
 }
 
 bool GraphicContentInterpreter::TjCommand(const PDFObjectVector& inOperands) {
