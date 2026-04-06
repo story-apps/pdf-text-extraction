@@ -660,18 +660,18 @@ static std::string InsertText(const QList<FormatString>& inLineText, QTextCursor
     auto itText = inLineText.constBegin();
     for (; itText != inLineText.constEnd(); ++itText) {
         QTextCharFormat format;
-        if (itText->formats.find(TextFormat::Bold) != itText->formats.end()) {
-            format.setFontWeight(QFont::Bold);
-        }
-        if (itText->formats.find(TextFormat::Italic) != itText->formats.end()) {
-            format.setFontItalic(true);
-        }
-        if (itText->formats.find(TextFormat::Underline) != itText->formats.end()) {
-            format.setFontUnderline(true);
-        }
-        if (itText->formats.find(TextFormat::Strikeout) != itText->formats.end()) {
-            format.setFontStrikeOut(true);
-        }
+        //
+        // Явно задаём все флаги шрифта: иначе insertText() сливает format с текущим
+        // форматом курсора, и жирное начертание с конца страницы «течёт» на следующую.
+        //
+        format.setFontWeight(itText->formats.find(TextFormat::Bold) != itText->formats.end()
+                                 ? QFont::Bold
+                                 : QFont::Normal);
+        format.setFontItalic(itText->formats.find(TextFormat::Italic) != itText->formats.end());
+        format.setFontUnderline(itText->formats.find(TextFormat::Underline)
+                                != itText->formats.end());
+        format.setFontStrikeOut(itText->formats.find(TextFormat::Strikeout)
+                                != itText->formats.end());
 
         QColor color(itText->backgroundColor.red * 255, itText->backgroundColor.green * 255,
                      itText->backgroundColor.blue * 255);

@@ -355,6 +355,26 @@ void FontDecoder::ParseFontData(PDFParser* inParser, PDFDictionary* inFont) {
     RefCountPtr<PDFObject> subType = inFont->QueryDirectObject("Subtype");
     isSimpleFont = ParsedPrimitiveHelper(subType.GetPtr()).ToString() != "Type0";
 
+    baseFontStyleSource_.clear();
+    if (isSimpleFont) {
+        PDFObjectCastPtr<PDFName> baseFontObject = inParser->QueryDictionaryObject(inFont, "BaseFont");
+        if (!!baseFontObject) {
+            baseFontStyleSource_ = baseFontObject->GetValue();
+        }
+    } else {
+        PDFObjectCastPtr<PDFArray> descendantFonts = inParser->QueryDictionaryObject(inFont, "DescendantFonts");
+        if (!!descendantFonts && descendantFonts->GetLength() > 0) {
+            PDFObjectCastPtr<PDFDictionary> descFont = inParser->QueryArrayObject(descendantFonts.GetPtr(), 0);
+            if (!!descFont) {
+                PDFObjectCastPtr<PDFName> baseFontObject
+                    = inParser->QueryDictionaryObject(descFont.GetPtr(), "BaseFont");
+                if (!!baseFontObject) {
+                    baseFontStyleSource_ = baseFontObject->GetValue();
+                }
+            }
+        }
+    }
+
     hasToUnicode = false;
     hasSimpleEncoding = false;
     PDFObjectCastPtr<PDFStreamInput> toUnicode = inParser->QueryDictionaryObject(inFont, "ToUnicode");
@@ -539,4 +559,9 @@ DispositionResultList FontDecoder::ComputeDisplacements(const ByteList& inAsByte
         }        
     }
     return result;
+}
+
+const std::string& FontDecoder::baseFontStyleSource() const
+{
+    return baseFontStyleSource_;
 }

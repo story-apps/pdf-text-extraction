@@ -11,12 +11,27 @@
 #include "PDFObjectCast.h"
 #include "PDFParser.h"
 
+#include "ParsedTextPlacement.h"
 
 #include <sstream>
 
 using namespace std;
 
 static const string scSpace = " ";
+
+namespace {
+
+void AppendStyleFormatsFromBaseFontString(const std::string& baseFont, TextParameters& outParams)
+{
+    if (baseFont.find("Bold") != std::string::npos || baseFont.find("bold") != std::string::npos) {
+        outParams.formats.insert(TextFormat::Bold);
+    }
+    if (baseFont.find("Italic") != std::string::npos || baseFont.find("italic") != std::string::npos) {
+        outParams.formats.insert(TextFormat::Italic);
+    }
+}
+
+} // namespace
 
 TextInterpeter::TextInterpeter(void) {
     SetHandler(NULL);
@@ -68,6 +83,20 @@ bool TextInterpeter::OnTextElementComplete(const TextElement& inTextElement, con
     for(; commandIt != inTextElement.texts.end() && shouldContinue; ++commandIt) {
         const PlacedTextCommand& item = *commandIt;
 
+        FontDecoder* decoder = GetDecoderForFont(item.textState.fontRef.GetPtr());
+        if (!decoder) {
+            continue;
+        }
+
+        TextParameters placementParameters;
+        placementParameters.constantAlpha = inParameters.constantAlpha;
+        const std::string& baseFontName = decoder->baseFontStyleSource();
+        if (!baseFontName.empty()) {
+            AppendStyleFormatsFromBaseFontString(baseFontName, placementParameters);
+        } else {
+            placementParameters.formats = inParameters.formats;
+        }
+
         // local matrix for this item. will be used to determine global box out of item local dimensions
         double itemTextStateTm[6];
 
@@ -77,11 +106,6 @@ bool TextInterpeter::OnTextElementComplete(const TextElement& inTextElement, con
             CopyMatrix(nextPlacementDefaultTm, itemTextStateTm);
         else
             CopyMatrix(item.textState.tm, itemTextStateTm);
-
-        // Determine a decoder for the text font
-        FontDecoder* decoder = GetDecoderForFont(item.textState.fontRef.GetPtr());
-        if(!decoder)
-            continue;
 
         CopyMatrix(itemTextStateTm, nextPlacementDefaultTm);
         hasDefaultTm = true;
@@ -143,7 +167,7 @@ bool TextInterpeter::OnTextElementComplete(const TextElement& inTextElement, con
                         globalBBox,
                         spaceWidth,
                         globalWidthVector,
-                        inParameters
+                        placementParameters
                 );
 
                 shouldContinue = handler->OnParsedTextPlacementComplete(placement);
