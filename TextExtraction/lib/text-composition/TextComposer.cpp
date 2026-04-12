@@ -672,7 +672,7 @@ static std::string InsertText(const QList<FormatString>& inLineText, QTextCursor
         QTextCharFormat format;
         //
         // Явно задаём все флаги шрифта: иначе insertText() сливает format с текущим
-        // форматом курсора, и жирное начертание с конца страницы «течёт» на следующую.
+        // форматом курсора, и форматирование с конца страницы «течёт» на следующую.
         //
         format.setFontWeight(itText->formats.find(TextFormat::Bold) != itText->formats.end()
                                  ? QFont::Bold
@@ -1125,16 +1125,6 @@ void TextComposer::ComposeDocument(const ParsedTextPlacementList& inTextPlacemen
         }
 
         if (AreSameLine(latestItem, *itCommands)) {
-            //
-            // Пропускаем дефисы, чей bbox полностью внутри bbox предыдущего placement'а
-            //
-            if (itCommands->globalBbox[2] <= latestItem.globalBbox[2]
-                && itCommands->globalBbox[0] >= latestItem.globalBbox[0]
-                && (itCommands->text == "-" || itCommands->text == "\xe2\x80\x93"
-                    || itCommands->text == "\xe2\x80\x94")) {
-                continue;
-            }
-
             if (addHorizontalSpaces) {
                 //
                 // NOTE: это работает не всегда!
