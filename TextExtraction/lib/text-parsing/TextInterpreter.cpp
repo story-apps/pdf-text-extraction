@@ -10,7 +10,6 @@
 #include "PDFIndirectObjectReference.h"
 #include "PDFObjectCast.h"
 #include "PDFParser.h"
-
 #include "ParsedTextPlacement.h"
 
 #include <sstream>
@@ -90,7 +89,7 @@ bool TextInterpeter::OnTextElementComplete(const TextElement& inTextElement, con
 
         TextParameters placementParameters;
         placementParameters.constantAlpha = inParameters.constantAlpha;
-        const std::string& baseFontName = decoder->baseFontStyleSource();
+        const std::string& baseFontName = decoder->BaseFontStyleSource();
         if (!baseFontName.empty()) {
             AppendStyleFormatsFromBaseFontString(baseFontName, placementParameters);
         } else {
