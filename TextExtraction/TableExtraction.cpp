@@ -105,8 +105,9 @@ void TableExtraction::ClearState() {
     LatestError.description = scEmpty;
 }
 
-EStatusCode TableExtraction::ExtractTables(const std::string& inFilePath, long inStartPage, long inEndPage,
-                                           long inEndPage, bool inShouldComposeTables) {
+EStatusCode TableExtraction::ExtractTables(const std::string& inFilePath, long inStartPage,
+                                           long inEndPage, bool inShouldComposeTables)
+{
     EStatusCode status = eSuccess;
     InputFile sourceFile;
 
@@ -175,45 +176,7 @@ PDFHummus::EStatusCode TableExtraction::ExtractTables(IByteReaderWithPosition* i
         ComposeTables();
     } while(false);
 
-    return status;    
-}
-
-PDFHummus::EStatusCode TableExtraction::ExtractTables(PDFParser* inParser, long inStartPage, long inEndPage) {
-    ClearState();
-
-    PDFHummus::EStatusCode status = ExtractTablePlacements(inParser, inStartPage, inEndPage);
-    if(status == eSuccess) {
-        ComposeTables();
-    }
-
     return status;
-}
-
-PDFHummus::EStatusCode TableExtraction::ExtractTables(IByteReaderWithPosition* inStream, long inStartPage, long inEndPage)  {
-    EStatusCode status = eSuccess;
-
-    ClearState();
-
-    do {
-        PDFParser parser;
-        status = parser.StartPDFParsing(inStream);
-        if(status != eSuccess)
-        {
-            LatestError.code = eErrorInternalPDFWriter;
-            LatestError.description = string("Failed to parse file");
-            break;
-        }
-
-        status = ExtractTablePlacements(&parser, inStartPage, inEndPage);
-        if(status != eSuccess)
-            break;
-
-        if (inShouldComposeTables) {
-            ComposeTables();
-        }
-    } while(false);
-
-    return status;    
 }
 
 void TableExtraction::ComposeTables() {
