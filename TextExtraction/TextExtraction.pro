@@ -24,6 +24,12 @@ INCLUDEPATH += $$PWD
 HEADERS += \
     lib/bidi/BidiConversion.h \
     lib/font-translation/Encoding.h \
+    lib/font-translation/EncodingAdobeGlyphList.h \
+    lib/font-translation/EncodingMacExpert.h \
+    lib/font-translation/EncodingMacRoman.h \
+    lib/font-translation/EncodingStandard.h \
+    lib/font-translation/EncodingSymbol.h \
+    lib/font-translation/EncodingWinAnsi.h \
     lib/font-translation/FontDecoder.h \
     lib/font-translation/StandardFontsDimensions.h \
     lib/font-translation/Translation.h \
@@ -62,6 +68,12 @@ HEADERS += \
 SOURCES += \
     lib/bidi/BidiConversion.cpp \
     lib/font-translation/Encoding.cpp \
+    lib/font-translation/EncodingAdobeGlyphList.cpp \
+    lib/font-translation/EncodingMacExpert.cpp \
+    lib/font-translation/EncodingMacRoman.cpp \
+    lib/font-translation/EncodingStandard.cpp \
+    lib/font-translation/EncodingSymbol.cpp \
+    lib/font-translation/EncodingWinAnsi.cpp \
     lib/font-translation/FontDecoder.cpp \
     lib/font-translation/StandardFontsDimensions.cpp \
     lib/graphic-content-parsing/GraphicContentInterpreter.cpp \
