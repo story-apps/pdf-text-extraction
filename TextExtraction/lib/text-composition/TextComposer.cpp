@@ -1004,7 +1004,7 @@ void TextComposer::ComposeText(const ParsedTextPlacementList& inTextPlacements, 
         lineResult<<itCommands->text;
         latestItem = *itCommands;
     }
-    MergeLineStreamToResultString(lineResult, bidiFlag ,addVerticalSpaces && hasPreviousLineInPage, lineBox, prevLineBox);
+    MergeLineStreamToResultString(lineResult, bidiFlag ,addVerticalSpaces && hasPreviousLineInPage, lineBox, prevLineBox, outStream);
 
 }
 
